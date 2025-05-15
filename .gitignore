@@ -1,0 +1,34 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Environment/config files
+.env
+*.env
+
+# Logs and runtime files
+*.log
+*.pid
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Tests cache
+.pytest_cache/
+.coverage
+
+# OS-generated
+.DS_Store
+Thumbs.db

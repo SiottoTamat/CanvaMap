@@ -1,0 +1,173 @@
+from PIL import Image, ImageTk
+import tkinter as tk
+
+from canvamap.tile_handler import request_tile, degree2tile, tile2degree
+
+tile_size = 256
+
+
+class CanvasMap(tk.Canvas):
+    def __init__(
+        self,
+        master,
+        lat,
+        lon,
+        zoom,
+        provider="https://tile.openstreetmap.org",
+        **kwargs,
+    ):
+        super().__init__(master, **kwargs)
+        self.lat = lat
+        self.lon = lon
+        self.zoom = zoom
+        self.provider = provider
+        self.tile_size = tile_size
+        self.tile_images = []
+        self._redraw_after_id = None
+
+        # Track pan state
+        self._is_dragging = False
+        self._drag_start_x = 0
+        self._drag_start_y = 0
+        self.offset_x = 0
+        self.offset_y = 0
+
+        self.bind("<Configure>", self._on_resize)
+        self.bind("<ButtonPress-1>", self._start_drag)
+        self.bind("<B1-Motion>", self._on_drag)
+        self.bind("<ButtonRelease-1>", self._end_drag)
+        self.bind("<MouseWheel>", self._on_zoom)  # Windows
+        self.bind("<Button-4>", self._on_zoom)  # Linux scroll up
+        self.bind("<Button-5>", self._on_zoom)  # Linux scroll down
+
+        self.after(100, self.draw_map)
+
+    def _on_resize(self, event):
+        if self._redraw_after_id:
+            self.after_cancel(self._redraw_after_id)
+        self._redraw_after_id = self.after(200, self.draw_map)
+
+    def _start_drag(self, event):
+        self._is_dragging = True
+        self._drag_start_x = event.x
+        self._drag_start_y = event.y
+
+    def _on_drag(self, event):
+        dx = event.x - self._drag_start_x
+        dy = event.y - self._drag_start_y
+        self._drag_start_x = event.x
+        self._drag_start_y = event.y
+        self.offset_x -= dx
+        self.offset_y -= dy
+        self.move("tile", dx, dy)
+
+    def _end_drag(self, event):
+        if self.offset_x != 0 or self.offset_y != 0:
+            self._update_center_after_pan()
+            self.draw_map()
+
+    def _on_zoom(self, event):
+        if event.num == 5 or event.delta < 0:
+            if self.zoom > 1:
+                self.zoom -= 1
+        elif event.num == 4 or event.delta > 0:
+            if self.zoom < 19:
+                self.zoom += 1
+        self.draw_map()
+
+    def draw_map(self, event=None):
+        self.delete("all")
+        canvas_width = self.winfo_width()
+        canvas_height = self.winfo_height()
+
+        if canvas_width <= 1 or canvas_height <= 1:
+            self.after(100, self.draw_map)
+            return
+
+        num_x_tiles = (canvas_width // self.tile_size) + 2
+        num_y_tiles = (canvas_height // self.tile_size) + 2
+
+        # Get fractional tile coordinates of center
+        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
+
+        # Integer part (for tile indexing)
+        start_tile_x = int(exact_tile_x - num_x_tiles // 2)
+        start_tile_y = int(exact_tile_y - num_y_tiles // 2)
+
+        # Pixel offset for fractional part
+        offset_px_x = int((exact_tile_x - start_tile_x) * self.tile_size)
+        offset_px_y = int((exact_tile_y - start_tile_y) * self.tile_size)
+
+        origin_px_x = (canvas_width // 2) - offset_px_x
+        origin_px_y = (canvas_height // 2) - offset_px_y
+
+        self.tile_images.clear()
+
+        for j in range(num_y_tiles):
+            for i in range(num_x_tiles):
+                x = start_tile_x + i
+                y = start_tile_y + j
+
+                tile_data = request_tile(x, y, self.zoom, self.provider)
+                if tile_data:
+                    image = Image.open(tile_data)
+                    tk_image = ImageTk.PhotoImage(image)
+
+                    px = origin_px_x + i * self.tile_size
+                    py = origin_px_y + j * self.tile_size
+
+                    self.create_image(
+                        px,
+                        py,
+                        image=tk_image,
+                        anchor="nw",
+                        tags="tile",
+                    )
+                    self.tile_images.append(tk_image)
+
+        self.offset_x = 0
+        self.offset_y = 0
+        self.lat, self.lon = self.get_center_latlon()
+        self.create_text(
+            self.winfo_width() - 5,
+            self.winfo_height() - 5,
+            text=f"Lat: {self.lat:.5f}, Lon: {self.lon:.5f},"
+            f" Zoom: {self.zoom}",
+            anchor="se",
+            fill="black",
+            font=("Arial", 10),
+            tags="latlonoverlay",
+        )
+
+    def _update_center_after_pan(self):
+        """Adjust self.lat/lon based on accumulated pixel drag offset."""
+        dx_tiles = self.offset_x / self.tile_size
+        dy_tiles = self.offset_y / self.tile_size
+        tile_x, tile_y = degree2tile(self.lat, self.lon, self.zoom)
+        new_tile_x = tile_x + dx_tiles
+        new_tile_y = tile_y + dy_tiles
+
+        self.lat, self.lon = tile2degree(new_tile_x, new_tile_y, self.zoom)
+        self.offset_x = 0
+        self.offset_y = 0
+        print(f"After: {self.lat}, {self.lon}")
+
+    def get_center_latlon(self) -> tuple[float, float]:
+        canvas_width = self.winfo_width()
+        canvas_height = self.winfo_height()
+
+        tile_x, tile_y = degree2tile(self.lat, self.lon, self.zoom)
+
+        num_x_tiles = (canvas_width // self.tile_size) + 2
+        num_y_tiles = (canvas_height // self.tile_size) + 2
+
+        start_x = tile_x - (num_x_tiles // 2)
+        start_y = tile_y - (num_y_tiles // 2)
+
+        offset_x = (canvas_width / 2) / self.tile_size
+        offset_y = (canvas_height / 2) / self.tile_size
+
+        center_tile_x = start_x + offset_x
+        center_tile_y = start_y + offset_y
+
+        return tile2degree(center_tile_x, center_tile_y, self.zoom)
