@@ -23,6 +23,7 @@ class CanvasMap(tk.Canvas):
         self.provider = provider
         self.tile_size = tile_size
         self.tile_images = []
+        self.layers = []
         self._redraw_after_id = None
 
         # Track pan state
@@ -138,6 +139,13 @@ class CanvasMap(tk.Canvas):
             font=("Arial", 10),
             tags="latlonoverlay",
         )
+        self._draw_layers()
+
+    def _draw_layers(self):
+        project = self.project_latlon_to_canvas
+        for layer in self.layers:
+            if layer.visible:
+                layer.draw(self, project)
 
     def _update_center_after_pan(self):
         """Adjust self.lat/lon based on accumulated pixel drag offset."""
@@ -171,3 +179,43 @@ class CanvasMap(tk.Canvas):
         center_tile_y = start_y + offset_y
 
         return tile2degree(center_tile_x, center_tile_y, self.zoom)
+
+    def add_layer(self, layer):
+        self.layers.append(layer)
+
+    def get_canvas_bounds(self) -> tuple[float, float, float, float]:
+        # Return the geographic bounding box
+        # (min_lat, min_lon, max_lat, max_lon)
+        w, h = self.winfo_width(), self.winfo_height()
+        top_left = self.project_canvas_to_latlon(0, 0)
+        bottom_right = self.project_canvas_to_latlon(w, h)
+        min_lat = min(top_left[0], bottom_right[0])
+        max_lat = max(top_left[0], bottom_right[0])
+        min_lon = min(top_left[1], bottom_right[1])
+        max_lon = max(top_left[1], bottom_right[1])
+        return (min_lat, min_lon, max_lat, max_lon)
+
+    def project_latlon_to_canvas(self, lat, lon) -> tuple[float, float]:
+        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
+        canvas_width = self.winfo_width()
+        canvas_height = self.winfo_height()
+        center_px = canvas_width // 2
+        center_py = canvas_height // 2
+        dx = (
+            degree2tile(lat, lon, self.zoom)[0] - exact_tile_x
+        ) * self.tile_size
+        dy = (
+            degree2tile(lat, lon, self.zoom)[1] - exact_tile_y
+        ) * self.tile_size
+        return center_px + dx, center_py + dy
+
+    def project_canvas_to_latlon(self, x_px, y_px) -> tuple[float, float]:
+        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
+        canvas_width = self.winfo_width()
+        canvas_height = self.winfo_height()
+        dx_tiles = (x_px - (canvas_width / 2)) / self.tile_size
+        dy_tiles = (y_px - (canvas_height / 2)) / self.tile_size
+        lonlat = tile2degree(
+            exact_tile_x + dx_tiles, exact_tile_y + dy_tiles, self.zoom
+        )
+        return lonlat
