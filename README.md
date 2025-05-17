@@ -8,7 +8,7 @@ This package is under active development — expect bugs, rapid changes, and inc
 ## Features
 
 - View OpenStreetMap tiles in a `tkinter.Canvas`
-- Smooth panning and zooming
+- Smooth panning and zooming (coming soon)
 - Coordinate tracking of canvas center
 - Modular design, written for extensibility
 
