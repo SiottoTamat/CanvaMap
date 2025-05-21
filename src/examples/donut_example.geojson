@@ -1,0 +1,96 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "radius": 6,
+                "color": "red",
+                "label": "Jefferson Memorial",
+                "opacity": 1,
+                "outline": "white"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -77.03657933260475,
+                    38.881359032440976
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "radius": 4,
+                "color": "blue",
+                "label": "Washington Memorial",
+                "opacity": 1,
+                "outline": "black"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -77.0353236213486,
+                    38.88940640453685
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Tidal Basin (Donut)",
+                "fill": "#66c2a5",
+                "outline": "#006d2c"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            -77.0432,
+                            38.8843
+                        ],
+                        [
+                            -77.0404,
+                            38.8820
+                        ],
+                        [
+                            -77.0369,
+                            38.8829
+                        ],
+                        [
+                            -77.0389,
+                            38.8854
+                        ],
+                        [
+                            -77.0432,
+                            38.8843
+                        ]
+                    ],
+                    [
+                        [
+                            -77.04186,
+                            38.88404
+                        ],
+                        [
+                            -77.04046,
+                            38.88289
+                        ],
+                        [
+                            -77.03871,
+                            38.88334
+                        ],
+                        [
+                            -77.03971,
+                            38.88459
+                        ],
+                        [
+                            -77.04186,
+                            38.88404
+                        ]
+                    ]
+                ]
+            }
+        }
+    ]
+}

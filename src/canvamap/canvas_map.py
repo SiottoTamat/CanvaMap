@@ -135,7 +135,7 @@ class CanvasMap(tk.Canvas):
         canvas_height = self.winfo_height()
 
         if canvas_width <= 1 or canvas_height <= 1:
-            self.after(100, self.draw_map)
+            self.after(50, self.draw_map)
             return
 
         num_x_tiles = (canvas_width // self.tile_size) + 2
