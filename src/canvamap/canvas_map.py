@@ -78,6 +78,26 @@ class CanvasMap(tk.Canvas):
         self.draw_map()
 
     def _get_origin_px(self):
+        """
+        Compute the origin (top-left corner) of the map in pixel coordinates.
+
+        This method calculates:
+        - the starting tile indices (top-left tile) visible on the canvas,
+        - the pixel offset of the exact map center within that tile,
+        - the pixel coordinates of the origin (top-left of first tile)
+        on the canvas.
+
+        This logic ensures perfect alignment between map tiles
+        and projected lat/lon features,
+        and is reused across all projection and rendering operations.
+
+        Returns:
+            tuple[int, int, float, float]:
+                start_tile_x: X index of top-left tile,
+                start_tile_y: Y index of top-left tile,
+                origin_px_x: X coordinate of the tile origin on canvas,
+                origin_px_y: Y coordinate of the tile origin on canvas.
+        """
         canvas_width = self.winfo_width()
         canvas_height = self.winfo_height()
 
@@ -98,6 +118,18 @@ class CanvasMap(tk.Canvas):
         return start_tile_x, start_tile_y, origin_px_x, origin_px_y
 
     def draw_map(self, event=None):
+        """
+        Render the current visible map area on the canvas.
+
+        This includes:
+        - Determining visible tiles based on center coordinates and zoom level,
+        - Requesting and drawing each tile image,
+        - Recalculating the center coordinates based on updated tile positions,
+        - Drawing all visible layers (e.g., points) on top of the map.
+
+        This is the core function driving the dynamic,
+        zoomable tile map rendering.
+        """
         self.delete("all")
         canvas_width = self.winfo_width()
         canvas_height = self.winfo_height()
@@ -172,6 +204,19 @@ class CanvasMap(tk.Canvas):
         print(f"After: {self.lat}, {self.lon}")
 
     def get_center_latlon(self) -> tuple[float, float]:
+        """
+        Compute the geographic coordinates of the current center of the canvas.
+
+        This method performs the reverse of `project_latlon_to_canvas`,
+        projecting the visual center of the canvas back into a (lat, lon)
+        based on tile origin and zoom level.
+
+        It is used to update the internal state after panning or zooming,
+        ensuring the logical center matches the visual center.
+
+        Returns:
+            tuple[float, float]: (latitude, longitude) of the canvas center.
+        """
         canvas_width = self.winfo_width()
         canvas_height = self.winfo_height()
 
@@ -216,7 +261,21 @@ class CanvasMap(tk.Canvas):
         return (min_lat, min_lon, max_lat, max_lon)
 
     def project_latlon_to_canvas(self, lat, lon) -> tuple[float, float]:
+        """
+        Project a geographic coordinate (latitude, longitude)
+        to canvas pixel coordinates.
 
+        Uses the current zoom level and map center to calculate
+        where the point should appear on screen.
+        Relies on `_get_origin_px` to ensure consistency with tile rendering.
+
+        Args:
+            lat (float): Latitude of the geographic point.
+            lon (float): Longitude of the geographic point.
+
+        Returns:
+            tuple[float, float]: (x, y) pixel coordinates on the canvas.
+        """
         start_tile_x, start_tile_y, origin_px_x, origin_px_y = (
             self._get_origin_px()
         )
