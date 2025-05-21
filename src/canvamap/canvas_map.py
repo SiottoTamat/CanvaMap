@@ -1,5 +1,6 @@
 from PIL import Image, ImageTk
 import tkinter as tk
+import math
 
 from canvamap.tile_handler import request_tile, degree2tile, tile2degree
 
@@ -76,6 +77,26 @@ class CanvasMap(tk.Canvas):
                 self.zoom += 1
         self.draw_map()
 
+    def _get_origin_px(self):
+        canvas_width = self.winfo_width()
+        canvas_height = self.winfo_height()
+
+        num_x_tiles = (canvas_width // self.tile_size) + 2
+        num_y_tiles = (canvas_height // self.tile_size) + 2
+
+        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
+
+        start_tile_x = int(math.floor(exact_tile_x - num_x_tiles / 2))
+        start_tile_y = int(math.floor(exact_tile_y - num_y_tiles / 2))
+
+        offset_px_x = (exact_tile_x - start_tile_x) * self.tile_size
+        offset_px_y = (exact_tile_y - start_tile_y) * self.tile_size
+
+        origin_px_x = (canvas_width / 2) - offset_px_x
+        origin_px_y = (canvas_height / 2) - offset_px_y
+
+        return start_tile_x, start_tile_y, origin_px_x, origin_px_y
+
     def draw_map(self, event=None):
         self.delete("all")
         canvas_width = self.winfo_width()
@@ -88,19 +109,9 @@ class CanvasMap(tk.Canvas):
         num_x_tiles = (canvas_width // self.tile_size) + 2
         num_y_tiles = (canvas_height // self.tile_size) + 2
 
-        # Get fractional tile coordinates of center
-        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
-
-        # Integer part (for tile indexing)
-        start_tile_x = int(exact_tile_x - num_x_tiles // 2)
-        start_tile_y = int(exact_tile_y - num_y_tiles // 2)
-
-        # Pixel offset for fractional part
-        offset_px_x = int((exact_tile_x - start_tile_x) * self.tile_size)
-        offset_px_y = int((exact_tile_y - start_tile_y) * self.tile_size)
-
-        origin_px_x = (canvas_width // 2) - offset_px_x
-        origin_px_y = (canvas_height // 2) - offset_px_y
+        start_tile_x, start_tile_y, origin_px_x, origin_px_y = (
+            self._get_origin_px()
+        )
 
         self.tile_images.clear()
 
@@ -164,19 +175,28 @@ class CanvasMap(tk.Canvas):
         canvas_width = self.winfo_width()
         canvas_height = self.winfo_height()
 
-        tile_x, tile_y = degree2tile(self.lat, self.lon, self.zoom)
+        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
 
         num_x_tiles = (canvas_width // self.tile_size) + 2
         num_y_tiles = (canvas_height // self.tile_size) + 2
 
-        start_x = tile_x - (num_x_tiles // 2)
-        start_y = tile_y - (num_y_tiles // 2)
+        # Match EXACTLY the _get_origin_px calculation:
+        start_tile_x = int(math.floor(exact_tile_x - num_x_tiles / 2))
+        start_tile_y = int(math.floor(exact_tile_y - num_y_tiles / 2))
 
-        offset_x = (canvas_width / 2) / self.tile_size
-        offset_y = (canvas_height / 2) / self.tile_size
+        offset_px_x = (exact_tile_x - start_tile_x) * self.tile_size
+        offset_px_y = (exact_tile_y - start_tile_y) * self.tile_size
 
-        center_tile_x = start_x + offset_x
-        center_tile_y = start_y + offset_y
+        origin_px_x = (canvas_width / 2) - offset_px_x
+        origin_px_y = (canvas_height / 2) - offset_px_y
+
+        # Now recalculate exact center tile coordinates:
+        center_tile_x = (
+            start_tile_x + (canvas_width / 2 - origin_px_x) / self.tile_size
+        )
+        center_tile_y = (
+            start_tile_y + (canvas_height / 2 - origin_px_y) / self.tile_size
+        )
 
         return tile2degree(center_tile_x, center_tile_y, self.zoom)
 
@@ -196,18 +216,19 @@ class CanvasMap(tk.Canvas):
         return (min_lat, min_lon, max_lat, max_lon)
 
     def project_latlon_to_canvas(self, lat, lon) -> tuple[float, float]:
-        exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
-        canvas_width = self.winfo_width()
-        canvas_height = self.winfo_height()
-        center_px = canvas_width // 2
-        center_py = canvas_height // 2
-        dx = (
-            degree2tile(lat, lon, self.zoom)[0] - exact_tile_x
-        ) * self.tile_size
-        dy = (
-            degree2tile(lat, lon, self.zoom)[1] - exact_tile_y
-        ) * self.tile_size
-        return center_px + dx, center_py + dy
+
+        start_tile_x, start_tile_y, origin_px_x, origin_px_y = (
+            self._get_origin_px()
+        )
+
+        # Tile coordinates of point
+        exact_point_x, exact_point_y = degree2tile(lat, lon, self.zoom)
+
+        # Pixel position relative to origin
+        dx = (exact_point_x - start_tile_x) * self.tile_size
+        dy = (exact_point_y - start_tile_y) * self.tile_size
+
+        return origin_px_x + dx, origin_px_y + dy
 
     def project_canvas_to_latlon(self, x_px, y_px) -> tuple[float, float]:
         exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)

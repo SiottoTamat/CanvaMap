@@ -11,7 +11,7 @@ def open_window(x, y, zoom, layers: list[MapLayer] = []):
 
     window = tk.Tk()
     window.title("Test Window")
-    window.geometry("1000x1000")
+    window.geometry("500x200")
 
     canvas = CanvasMap(window, x, y, zoom)
     canvas.pack(fill="both", expand=True)
