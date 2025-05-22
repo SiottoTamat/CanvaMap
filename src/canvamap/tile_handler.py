@@ -70,6 +70,18 @@ def request_tile(
     x_tile, y_tile, zoom, provider: str = r"https://tile.openstreetmap.org"
 ) -> BytesIO | None:
     """Request tile from map provider."""
+    # 1) sanity‐check zoom
+    MAX_ZOOM = 19
+    if not isinstance(zoom, int) or zoom < 0 or zoom > MAX_ZOOM:
+        logger.error(f"Invalid zoom level: {zoom}")
+        return None
+
+    # 2) sanity‐check tile X/Y bounds
+    max_index = 2**zoom - 1
+    if x_tile < 0 or x_tile > max_index or y_tile < 0 or y_tile > max_index:
+        # off‐map tile: skip fetching
+        return None
+
     key = (zoom, x_tile, y_tile)
     if key in tile_memory_cache:
         return tile_memory_cache[key]

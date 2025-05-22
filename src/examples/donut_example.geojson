@@ -39,6 +39,7 @@
             "type": "Feature",
             "properties": {
                 "name": "Tidal Basin (Donut)",
+                "label": "Tidal Basin (Donut)",
                 "fill": "#66c2a5",
                 "outline": "#006d2c"
             },

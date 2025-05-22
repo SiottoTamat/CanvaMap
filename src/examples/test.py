@@ -19,7 +19,7 @@ def open_window(x, y, zoom=15, features: dict = {}, on_click=None):
     canvas = CanvasMap(window, x, y, zoom)
     canvas.pack(fill="both", expand=True)
 
-    load_geojson_to_map(canvas, features, on_click)
+    load_geojson_to_map(canvas, features, on_click, label_key="label")
 
     # for layer in layers:
     #     layer.on_click = on_click
