@@ -15,13 +15,11 @@ class MapLayer(ABC):
         name: str,
         on_click: Callable[[dict], None] | None = None,
         label_key: str | None = None,
-        # raw_features: list[dict] = [],
     ):
         self.name = name
         self.visible = True
         self.on_click = on_click
         self.label_key = label_key
-        # self.features = [self.normalize_feature(f) for f in raw_features]
 
     @abstractmethod
     def draw(
@@ -65,7 +63,6 @@ class PointLayer(MapLayer):
     def __init__(
         self,
         name: str,
-        # features: list[dict],
         on_click=None,
         label_key=None,
     ):
@@ -143,7 +140,6 @@ class ShapeLayer(MapLayer):
     def __init__(
         self,
         name: str,
-        # features: list[dict],
         on_click=None,
         label_key=None,
     ):
@@ -176,54 +172,67 @@ class ShapeLayer(MapLayer):
         project_fn: Callable[[float, float], tuple[float, float]],
     ):
 
-        # here implement visibility
-        visible = self.features
+        min_lat, min_lon, max_lat, max_lon = canvas.get_canvas_bounds()
+
+        visible: list[dict] = []
+        for feat in self.features:
+            # pull all the rings (outer + holes)
+            outer_shapes = feat["geometry"]["coordinates"]
+
+            lats = [lat for shape in outer_shapes for lon, lat in shape]
+            lons = [lon for shape in outer_shapes for lon, lat in shape]
+
+            if (
+                max(lats) >= min_lat
+                and min(lats) <= max_lat
+                and max(lons) >= min_lon
+                and min(lons) <= max_lon
+            ):
+                visible.append(feat)
 
         for feat in visible:
 
-            outer_ring = feat["geometry"]["coordinates"][0]
-            all_points = [[project_fn(p[1], p[0]) for p in outer_ring]]
-            if len(feat["geometry"]["coordinates"]) > 1:
-                all_points.append(
-                    [
-                        project_fn(p[1], p[0])
-                        for p in feat["geometry"]["coordinates"][1]
-                    ]
+            points = []
+            for shape in feat["geometry"]["coordinates"]:
+                if points:
+                    points.extend([None, None])
+                for y, x in shape:
+                    px, py = project_fn(x, y)
+                    points.extend([px, py])
+
+            fill = feat.get("fill", "red")
+            outline = feat.get("outline", "black")
+            alpha = feat.get("alpha", 0.5)
+            if alpha < 1.0:
+                # gray12=~12% opaque, gray25=25%, gray50=50%, gray75=75%
+                stipple = f"gray{int(alpha*100)}"
+            else:
+                stipple = ""
+
+            shape = canvas.create_polygon(
+                *points,
+                fill=fill,
+                outline=outline,
+                stipple=stipple,
+                tags=(self.name,),
+            )
+            self._bind_feature(canvas, shape, feat)
+
+            label_text = feat.get(self.label_key) if self.label_key else None
+            if label_text:
+                label = LabelAnnotation(
+                    text=label_text,
+                    offset=feat.get("label_offset", (0, 0)),
+                    font=feat.get("label_font", ("Arial", 10)),
+                    text_color=feat.get("label_color", "black"),
+                    bg_color=feat.get("label_bg", "lightgray"),
+                    border_color=feat.get("label_border_color", "gray"),
+                    border_width=feat.get("label_border_width", 1),
                 )
 
-            for pts in all_points:
-                fill = feat.get("fill", "red")
-                outline = feat.get("outline", "black")
-                alpha = feat.get("alpha", 0.5)
-                if alpha < 1.0:
-                    # gray12=~12% opaque, gray25=25%, gray50=50%, gray75=75%
-                    stipple = f"gray{int(alpha*100)}"
-                else:
-                    stipple = ""
-
-                shape = canvas.create_polygon(
-                    *pts,
-                    fill=fill,
-                    outline=outline,
-                    stipple=stipple,
-                    tags=(self.name,),
+                label.draw(
+                    canvas, points[0], points[1], tags=(self.name, shape)
                 )
-                self._bind_feature(canvas, shape, feat)
-
-                label_text = (
-                    feat.get(self.label_key) if self.label_key else None
-                )
-                if label_text:
-                    label = LabelAnnotation(
-                        text=label_text,
-                        offset=feat.get("label_offset", (0, 0)),
-                        font=feat.get("label_font", ("Arial", 10)),
-                        text_color=feat.get("label_color", "black"),
-                        bg_color=feat.get("label_bg", "lightgray"),
-                        border_color=feat.get("label_border_color", "gray"),
-                        border_width=feat.get("label_border_width", 1),
-                    )
-                    label.draw(canvas, *pts[0], tags=(self.name, shape))
 
 
 class Linelayer(MapLayer):
