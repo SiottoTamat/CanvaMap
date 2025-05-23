@@ -1,4 +1,4 @@
-from canvamap.map_layer import PointLayer, ShapeLayer
+from canvamap.map_layer import PointLayer, ShapeLayer, LineLayer
 
 # LineLayer
 from canvamap.canvas_map import CanvasMap
@@ -11,10 +11,7 @@ def load_geojson_to_map(
     point_layer = PointLayer(
         "points", on_click=project_fn, label_key=label_key
     )
-    # line_layer = LineLayer("lines",
-    # [],
-    # on_click=project_fn,
-    # label_key=label_key)
+    line_layer = LineLayer("lines", on_click=project_fn, label_key=label_key)
     shape_layer = ShapeLayer(
         "polygons", on_click=project_fn, label_key=label_key
     )
@@ -24,8 +21,8 @@ def load_geojson_to_map(
         geom_type = norm_feat["geometry"]["type"]
         if geom_type in ("Point", "MultiPoint"):
             point_layer.add_feature(norm_feat)
-        # elif geom_type in ("LineString", "MultiLineString"):
-        #     line_layer.add_feature(feat)
+        elif geom_type in ("LineString", "MultiLineString"):
+            line_layer.add_feature(norm_feat)
         elif geom_type in ("Polygon", "MultiPolygon"):
             shape_layer.add_feature(norm_feat)
         else:
@@ -34,7 +31,7 @@ def load_geojson_to_map(
 
     # Add them to canvas
     map_widget.add_layer(point_layer)
-    # map_widget.add_layer(line_layer)
+    map_widget.add_layer(line_layer)
     map_widget.add_layer(shape_layer)
 
 

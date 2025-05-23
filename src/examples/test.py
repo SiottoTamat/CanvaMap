@@ -14,7 +14,7 @@ def on_click(feat):
 def open_window(x, y, zoom=15, features: dict = {}, on_click=None):
     window = tk.Tk()
     window.title("Test Window")
-    window.geometry("500x200")
+    window.geometry("1000x1000")
 
     canvas = CanvasMap(window, x, y, zoom)
     canvas.pack(fill="both", expand=True)
@@ -29,7 +29,7 @@ def open_window(x, y, zoom=15, features: dict = {}, on_click=None):
 
 if __name__ == "__main__":
     lat, lon = (38.881359032440976, -77.03657933260475)
-    zoom = 15
+    zoom = 14
 
     geojson_features = json.load(open("src\examples\donut_example.geojson"))
 

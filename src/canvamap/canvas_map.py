@@ -259,7 +259,7 @@ class CanvasMap(tk.Canvas):
         max_lat = max(top_left[0], bottom_right[0])
         min_lon = min(top_left[1], bottom_right[1])
         max_lon = max(top_left[1], bottom_right[1])
-        return (min_lat, min_lon, max_lat, max_lon)
+        return (min_lon, min_lat, max_lon, max_lat)
 
     def project_latlon_to_canvas(self, lat, lon) -> tuple[float, float]:
         """

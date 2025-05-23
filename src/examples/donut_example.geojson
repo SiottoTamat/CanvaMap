@@ -4,6 +4,133 @@
         {
             "type": "Feature",
             "properties": {
+                "name": "Line from Library of Congress to U.S. Capitol",
+                "fill": "red",
+                "width": 5,
+                "capstyle": "round"
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        -77.004722,
+                        38.888672
+                    ],
+                    [
+                        -77.009051,
+                        38.889939
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Parallel Lines 300 m either side of the Reflection Pool",
+                "label": "Parallel Lines 300 m",
+                "fill": "red",
+                "arrow": "last",
+                "width": 3
+            },
+            "geometry": {
+                "type": "MultiLineString",
+                "coordinates": [
+                    [
+                        [
+                            -77.051895,
+                            38.889491
+                        ],
+                        [
+                            -77.048441,
+                            38.889491
+                        ]
+                    ],
+                    [
+                        [
+                            -77.051895,
+                            38.889041
+                        ],
+                        [
+                            -77.048441,
+                            38.889041
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Two Test Pentagons",
+                "label": "Two Test Pentagons",
+                "fill": "yellow",
+                "outline": "purple"
+            },
+            "geometry": {
+                "type": "MultiPolygon",
+                "coordinates": [
+                    [
+                        [
+                            [
+                                -77.03621143913018,
+                                38.89770000000000
+                            ],
+                            [
+                                -77.03641082978731,
+                                38.89791358617416
+                            ],
+                            [
+                                -77.03673345064760,
+                                38.89783200351516
+                            ],
+                            [
+                                -77.03673345064760,
+                                38.89756799648484
+                            ],
+                            [
+                                -77.03641082978731,
+                                38.89748641382584
+                            ],
+                            [
+                                -77.03621143913018,
+                                38.89770000000000
+                            ]
+                        ]
+                    ],
+                    [
+                        [
+                            [
+                                -77.03563431739055,
+                                38.89770000000000
+                            ],
+                            [
+                                -77.03583370804768,
+                                38.89791358617416
+                            ],
+                            [
+                                -77.03615632890796,
+                                38.89783200351516
+                            ],
+                            [
+                                -77.03615632890796,
+                                38.89756799648484
+                            ],
+                            [
+                                -77.03583370804768,
+                                38.89748641382584
+                            ],
+                            [
+                                -77.03563431739055,
+                                38.89770000000000
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
                 "name": "Random Points in Arlington National Cemetery",
                 "label": "Random Points in Arlington National Cemetery",
                 "color": "purple",
