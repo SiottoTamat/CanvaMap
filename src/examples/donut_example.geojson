@@ -4,6 +4,48 @@
         {
             "type": "Feature",
             "properties": {
+                "name": "Random Points in Arlington National Cemetery",
+                "label": "Random Points in Arlington National Cemetery",
+                "color": "purple",
+                "outline": "black"
+            },
+            "geometry": {
+                "type": "MultiPoint",
+                "coordinates": [
+                    [
+                        -77.0654,
+                        38.8811
+                    ],
+                    [
+                        -77.0732,
+                        38.8889
+                    ],
+                    [
+                        -77.0587,
+                        38.8833
+                    ],
+                    [
+                        -77.0612,
+                        38.8895
+                    ],
+                    [
+                        -77.0698,
+                        38.8904
+                    ],
+                    [
+                        -77.0549,
+                        38.8822
+                    ],
+                    [
+                        -77.0703,
+                        38.8797
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
                 "radius": 6,
                 "color": "red",
                 "label": "Jefferson Memorial",

@@ -20,7 +20,7 @@ def load_geojson_to_map(
     )
 
     for feat in geojson["features"]:
-        norm_feat = normalize_feature(feat)
+        norm_feat = normalize_geometry(feat)
         geom_type = norm_feat["geometry"]["type"]
         if geom_type in ("Point", "MultiPoint"):
             point_layer.add_feature(norm_feat)
@@ -61,3 +61,34 @@ def normalize_feature(feat: dict) -> dict:
     flat["geometry"] = feat["geometry"]
     flat["properties"] = props
     return flat
+
+
+def normalize_geometry(feature: dict) -> dict:
+
+    geom = feature["geometry"]
+    geom_type = geom.get("type")
+    coords = geom.get("coordinates")
+
+    if geom_type == "Point":
+        list_coords = [tuple(coords)]
+    elif geom_type == "MultiPoint":
+        list_coords = [tuple(point) for point in coords]
+    elif geom_type == "LineString":
+        list_coords = [tuple(point) for point in coords]
+    elif geom_type == "MultiLineString":
+        list_coords = [[tuple(pt) for pt in line] for line in coords]
+    elif geom_type == "Polygon":
+        list_coords = [[tuple(coord) for coord in ring] for ring in coords]
+    elif geom_type == "MultiPolygon":
+        list_coords = [
+            [[tuple(coord) for coord in ring] for ring in polygon]
+            for polygon in coords
+        ]
+    else:
+        raise ValueError(f"Unsupported geometry type: {geom_type}")
+
+    return {
+        "type": "Feature",
+        "properties": feature.get("properties", {}),
+        "geometry": {"type": geom_type, "coordinates": list_coords},
+    }

@@ -26,6 +26,7 @@ class CanvasMap(tk.Canvas):
         self.tile_images = []
         self.layers = []
         self._redraw_after_id = None
+        self._image_refs: list[tk.PhotoImage] = []
 
         # Track pan state
         self._is_dragging = False

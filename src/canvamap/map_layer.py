@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Sequence
 import tkinter as tk
 import logging
+from PIL import Image, ImageTk, ImageDraw, ImageColor
 
 
 from canvamap.canvas_map import CanvasMap
@@ -76,53 +77,66 @@ class PointLayer(MapLayer):
         Accepts either a Point or MultiPoint Feature dict, normalizes it,
         and appends one or more normalized features to self.features.
         """
-        geom = feat.get("geometry", {})
-        geom_type = geom.get("type")
-
-        if geom_type == "Point":
-            self.features.append(feat)
-
-        elif geom_type == "MultiPoint":
-            # Split into individual Point features
-            for coords in geom.get("coordinates", []):
-                self.features.append(feat)
-
-        else:
-            logger.warning(
-                "PointLayer.add_feature: unsupported geometry '%s'", geom_type
-            )
+        self.features.append(feat)
 
     def draw(
         self, canvas, project_fn: Callable[[float, float], tuple[float, float]]
     ) -> None:
 
         bbox = canvas.get_canvas_bounds()
-        visible = [
-            f
-            for f in self.features
-            if bbox[0] <= f["geometry"]["coordinates"][1] <= bbox[2]
-            and bbox[1] <= f["geometry"]["coordinates"][0] <= bbox[3]
-        ]
+        # feature_tag = f"{self.name}_{self._feat_counter}"
 
-        for feat in visible:
+        for feat in self.features:
+            # for Multipoint label position
+            x_right = None
+            y_top = None
             feature_tag = f"{self.name}_{self._feat_counter}"
             self._feat_counter += 1
+            all_not_visible = True
 
-            x, y = project_fn(
-                feat["geometry"]["coordinates"][1],
-                feat["geometry"]["coordinates"][0],
-            )
-            # Draw a small circle at each point
-            r = feat.get("radius", 4)
-            color = feat.get("color", "red")
-            outline = feat.get("outline", "")
-            point = canvas.create_oval(
-                x - r, y - r, x + r, y + r, fill=color, outline=outline
-            )
-            self._bind_feature(canvas, point, feat)
+            for point in feat["geometry"]["coordinates"]:
+                if len(point) != 2:
+                    pass
+                visible = (
+                    bbox[0] <= point[1] <= bbox[2]
+                    and bbox[1] <= point[0] <= bbox[3]
+                )
+                if not visible:
+                    continue
+                all_not_visible = False
+                x, y = project_fn(
+                    point[1],
+                    point[0],
+                )
+                if x_right is None or x > x_right:
+                    x_right = x
+                    y_top = y
 
-            label_text = feat.get(self.label_key) if self.label_key else None
+                # Draw a small circle at each point
+                r = feat["properties"].get("radius", 4)
+                color = feat["properties"].get("color", "red")
+                outline = feat["properties"].get("outline", "")
+                point_id = canvas.create_oval(
+                    x - r,
+                    y - r,
+                    x + r,
+                    y + r,
+                    fill=color,
+                    outline=outline,
+                    tags=(self.name, feature_tag),
+                )
+                self._bind_feature(canvas, point_id, feat)
+            if all_not_visible:
+                continue
+            label_text = (
+                feat["properties"].get(self.label_key)
+                if self.label_key
+                else None
+            )
             if label_text:
+                # if feat['geometry'].get("type") == "MultiPoint":
+
+                # x1, y1, x2, y2 = canvas.bbox(feature_tag)
                 label = LabelAnnotation(
                     text=label_text,
                     offset=feat.get("label_offset", (r + 2, -r - 2)),
@@ -132,7 +146,9 @@ class PointLayer(MapLayer):
                     border_color=feat.get("label_border_color", "gray"),
                     border_width=feat.get("label_border_width", 1),
                 )
-                label.draw(canvas, x, y, tags=(self.name, feature_tag))
+                label.draw(
+                    canvas, x_right, y_top, tags=(self.name, feature_tag)
+                )
 
 
 class ShapeLayer(MapLayer):
@@ -194,45 +210,46 @@ class ShapeLayer(MapLayer):
 
             points = []
             for shape in feat["geometry"]["coordinates"]:
-                if points:
-                    points.extend([None, None])
-                for y, x in shape:
-                    px, py = project_fn(x, y)
-                    points.extend([px, py])
+                # if points:
+                #     points.extend([None, None])
+                # for y, x in shape:
+                #     px, py = project_fn(x, y)
+                #     points.extend([px, py])
+                points = [project_fn(x, y) for y, x in shape]
+                outline = feat.get("outline", "black")
 
-            fill = feat.get("fill", "red")
-            outline = feat.get("outline", "black")
-            alpha = feat.get("alpha", 0.5)
-            if alpha < 1.0:
-                # gray12=~12% opaque, gray25=25%, gray50=50%, gray75=75%
-                stipple = f"gray{int(alpha*100)}"
-            else:
-                stipple = ""
-
-            shape = canvas.create_polygon(
-                *points,
-                fill=fill,
-                outline=outline,
-                stipple=stipple,
-                tags=(self.name,),
+                shape = canvas.create_polygon(
+                    *points,
+                    fill="",
+                    outline=outline,
+                    tags=(self.name,),
+                )
+            shape_image = draw_feature_with_holes(
+                canvas, project_fn, feat, self.name
             )
-            self._bind_feature(canvas, shape, feat)
+            self._bind_feature(canvas, shape_image, feat)
 
-            label_text = feat.get(self.label_key) if self.label_key else None
+            label_text = (
+                feat["properties"].get(self.label_key)
+                if self.label_key
+                else None
+            )
             if label_text:
                 label = LabelAnnotation(
                     text=label_text,
-                    offset=feat.get("label_offset", (0, 0)),
-                    font=feat.get("label_font", ("Arial", 10)),
-                    text_color=feat.get("label_color", "black"),
-                    bg_color=feat.get("label_bg", "lightgray"),
-                    border_color=feat.get("label_border_color", "gray"),
-                    border_width=feat.get("label_border_width", 1),
+                    offset=feat["properties"].get("label_offset", (0, 0)),
+                    font=feat["properties"].get("label_font", ("Arial", 10)),
+                    text_color=feat["properties"].get("label_color", "black"),
+                    bg_color=feat["properties"].get("label_bg", "lightgray"),
+                    border_color=feat["properties"].get(
+                        "label_border_color", "gray"
+                    ),
+                    border_width=feat["properties"].get(
+                        "label_border_width", 1
+                    ),
                 )
-
-                label.draw(
-                    canvas, points[0], points[1], tags=(self.name, shape)
-                )
+                x1, y1, x2, y2 = canvas.bbox(shape_image)
+                label.draw(canvas, x2, y1, tags=(self.name, shape))
 
 
 class Linelayer(MapLayer):
@@ -293,3 +310,46 @@ class LabelAnnotation:
             tags=tags,
         )
         canvas.tag_lower(rect_id, text_id)
+
+
+def draw_feature_with_holes(canvas, project_fn, feat, tag, opacity=0.5):
+    rings = feat["geometry"]["coordinates"]
+    # 1) Project all rings into pixel coords
+    all_xy = []
+    for ring in rings:
+        pts = [project_fn(lat, lon) for lon, lat in ring]
+        all_xy.append(pts)
+
+    # 2) Compute bounding box in pixel space
+    xs = [x for ring in all_xy for x, y in ring]
+    ys = [y for ring in all_xy for x, y in ring]
+    min_x, max_x = int(min(xs)), int(max(xs))
+    min_y, max_y = int(min(ys)), int(max(ys))
+    w, h = max_x - min_x, max_y - min_y
+
+    # 3) Create an RGBA overlay image of just that bbox
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    mask = Image.new("L", (w, h), 0)  # grayscale mask
+
+    draw = ImageDraw.Draw(mask)
+    # 4) Draw outer ring (fill=255) then holes (fill=0) on the mask
+    draw.polygon([(x - min_x, y - min_y) for x, y in all_xy[0]], fill=255)
+    for hole in all_xy[1:]:
+        draw.polygon([(x - min_x, y - min_y) for x, y in hole], fill=0)
+
+    # 5) Color the overlay and apply the mask
+    fill_color = feat["properties"].get("fill", "red")
+    alpha = int(feat["properties"].get("alpha", 0.5) * 255)
+    color_img = Image.new(
+        "RGBA", (w, h), (*ImageColor.getrgb(fill_color), alpha)
+    )
+    overlay.paste(color_img, (0, 0), mask)
+
+    # 6) Convert to a PhotoImage and draw on the canvas
+    tk_img = ImageTk.PhotoImage(overlay)
+    img_id = canvas.create_image(
+        min_x, min_y, image=tk_img, anchor="nw", tags=(tag,)
+    )
+    # Keep a reference so Python doesn’t garbage‐collect it:
+    canvas._image_refs.append(tk_img)
+    return img_id
