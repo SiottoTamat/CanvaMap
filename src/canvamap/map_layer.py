@@ -208,11 +208,27 @@ class ShapeLayer(MapLayer):
             else:
                 self._bind_feature(canvas, image_ids, feat)
 
+            # Draw outline
+            outline = feat.properties.get("outline", "")
+            width = feat.properties.get("width", 2)
+            points = [
+                [project_fn(lat, lon) for lon, lat in ring] for ring in rings
+            ]
+            if outline:
+                for ring in points:
+                    canvas.create_line(
+                        *ring,
+                        fill=outline,
+                        width=width,
+                        tags=(self.name, feature_tag),
+                    )
+            flat_points = [point for ring in points for point in ring]
+            right_x_point = max(flat_points, key=lambda x: x[0])
+
             # Label at first ring's first vertex
             label_text = self._get_label_text(feat)
             if label_text:
-                lon, lat = rings[0][0]
-                x, y = project_fn(lat, lon)
+                x, y = right_x_point
                 from canvamap.map_layer import LabelAnnotation
 
                 label = LabelAnnotation(
@@ -266,12 +282,23 @@ class LineLayer(MapLayer):
 
                 feature_tag = f"{self.name}_{feat.sequence_index}"
 
+                props = feat.properties
+                style = {
+                    "fill": props.get("fill", "black"),
+                    "width": props.get("width", 1),
+                    "dash": tuple(props["dash"]) if "dash" in props else None,
+                    "arrow": props.get("arrow", "none"),
+                    "capstyle": props.get("capstyle", "round"),
+                    "joinstyle": props.get("joinstyle", "round"),
+                    "smooth": props.get("smooth", False),
+                    "splinesteps": props.get("splinesteps", 12),
+                }
+                canvas_opts = {k: v for k, v in style.items() if v is not None}
+
                 # Draw polyline
                 canvas.create_line(
                     *pts,
-                    fill=feat.properties.get("color", "black"),
-                    width=feat.properties.get("width", 2),
-                    dash=feat.properties.get("dash", None),
+                    **canvas_opts,
                     tags=(self.name, feature_tag),
                 )
                 self._bind_feature(canvas, feature_tag, feat)

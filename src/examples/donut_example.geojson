@@ -5,7 +5,7 @@
             "type": "Feature",
             "properties": {
                 "name": "Line from Library of Congress to U.S. Capitol",
-                "fill": "red",
+                "fill": "blue",
                 "width": 5,
                 "capstyle": "round"
             },
@@ -132,7 +132,7 @@
             "type": "Feature",
             "properties": {
                 "name": "Random Points in Arlington National Cemetery",
-                "label": "Random Points in Arlington National Cemetery",
+                "label": "Random Points in Arlington\n National Cemetery",
                 "color": "purple",
                 "outline": "black"
             },
