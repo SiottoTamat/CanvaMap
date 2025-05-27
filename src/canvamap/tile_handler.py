@@ -7,10 +7,16 @@ from Siotto_Utils.logger_utils import setup_logger
 
 load_dotenv(".env")
 user_email = os.getenv("user_email")
+if not user_email:
+    raise RuntimeError(
+        "Missing required environment variable user_email.\n"
+        + "Please add your email to your .env file, for example:\n"
+        + "  user_email=youremail@example.com"
+    )
 
 logger = setup_logger(__name__)
 
-tile_memory_cache = {}
+tile_memory_cache: dict[tuple[int, int, int], bytes] = {}
 
 
 def degree2tile(lat_deg, lon_deg, zoom):
@@ -84,15 +90,16 @@ def request_tile(
 
     key = (zoom, x_tile, y_tile)
     if key in tile_memory_cache:
-        return tile_memory_cache[key]
+        return BytesIO(tile_memory_cache[key])
 
     headers = {"User-Agent": f"canvamap/1.0 ({user_email})"}
     url = f"{provider}/{zoom}/{x_tile}/{y_tile}.png"
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
-        tile_memory_cache[key] = BytesIO(response.content)
-        return BytesIO(response.content)
+        raw = response.content
+        tile_memory_cache[key] = raw
+        return BytesIO(raw)
     else:
         logger.error(
             f"Failed to fetch tile: {response.status_code}",

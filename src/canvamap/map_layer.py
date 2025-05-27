@@ -1,11 +1,13 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Callable, Sequence
 import tkinter as tk
 import logging
-from PIL import Image, ImageTk, ImageDraw, ImageColor
 
-
+from canvamap.feature import Feature
 from canvamap.canvas_map import CanvasMap
+
+from PIL import Image, ImageTk, ImageDraw, ImageColor
 
 logger = logging.getLogger(__name__)
 
@@ -14,328 +16,291 @@ class MapLayer(ABC):
     def __init__(
         self,
         name: str,
-        on_click: Callable[[dict], None] | None = None,
+        on_click: Callable[[Feature], None] | None = None,
         label_key: str | None = None,
     ):
         self.name = name
         self.visible = True
         self.on_click = on_click
         self.label_key = label_key
-        self.features = []
+        self.features: list[Feature] = []
 
     @property
-    def feature_count(self):
+    def feature_count(self) -> int:
         return len(self.features)
 
-    @abstractmethod
-    def draw(
-        self,
-        canvas,
-        project_fn: Callable[[float, float], tuple[float, float]],
-    ) -> None:
-        """Draw the layer on the given canvas using a projection function."""
-        pass
+    def add_feature(self, feat: Feature) -> None:
+        """
+        Append a Feature instance to this layer.
+        """
+        self.features.append(feat)
 
     def _bind_feature(
         self,
         canvas: tk.Canvas,
-        item_id: int,
-        feature: dict,
-    ):
-
+        tag: str,
+        feature: Feature,
+    ) -> None:
         if not self.on_click:
             return
         canvas.tag_bind(
-            item_id, "<Button-1>", lambda e, f=feature: self.on_click(f)
+            tag, "<Button-1>", lambda e, f=feature: self.on_click(f)
         )
 
-    def add_feature(self, feat: dict):
-        self.features.append(feat)
+    def _get_label_text(self, feature: Feature) -> str:
+        if self.label_key:
+            return feature.properties.get(self.label_key, "")
+        return feature.properties.get("label", "")
 
-
-# --------------------------------------------------------------------------
-# Layer implementations
-# --------------------------------------------------------------------------
+    @abstractmethod
+    def draw(
+        self,
+        canvas: CanvasMap,
+        project_fn: Callable[[float, float], tuple[float, float]],
+    ) -> None:
+        """
+        Draw this layer’s features on the canvas.
+        """
+        pass
 
 
 class PointLayer(MapLayer):
     """
-    A layer of point features, each may have:
-      - 'lat', 'lon'           (required)
-      - 'label': str           (optional text to show)
-      - 'radius': int          (optional circle radius)
-      - 'label_offset': (dx,dy)  (optional tuple to nudge text)
-      - 'color': str           (optional fill color)
-      - 'alpha': 0<float<1     (optional transparency)
+    Render point and multipoint features as circles with optional labels.
     """
 
     def __init__(
         self,
         name: str,
-        on_click=None,
-        label_key=None,
+        on_click: Callable[[Feature], None] | None = None,
+        label_key: str | None = None,
     ):
-        super().__init__(name, on_click=on_click)
-        self.label_key = label_key
-
-    def draw(
-        self, canvas, project_fn: Callable[[float, float], tuple[float, float]]
-    ) -> None:
-
-        min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
-        # feature_tag = f"{self.name}_{self._feat_counter}"
-
-        for feat in self.features:
-            # for Multipoint label position
-            x_right = None
-            y_top = None
-            feature_tag = f"{self.name}_{self.feature_count}"
-            all_not_visible = True
-
-            for point in feat["geometry"]["coordinates"]:
-                if len(point) != 2:
-                    pass
-                visible = (
-                    min_lon <= point[0] <= max_lon
-                    and min_lat <= point[1] <= max_lat
-                )
-                if not visible:
-                    continue
-                all_not_visible = False
-                x, y = project_fn(
-                    point[1],
-                    point[0],
-                )
-                if x_right is None or x > x_right:
-                    x_right = x
-                    y_top = y
-
-                # Draw a small circle at each point
-                r = feat["properties"].get("radius", 4)
-                color = feat["properties"].get("color", "red")
-                outline = feat["properties"].get("outline", "")
-                point_id = canvas.create_oval(
-                    x - r,
-                    y - r,
-                    x + r,
-                    y + r,
-                    fill=color,
-                    outline=outline,
-                    tags=(self.name, feature_tag),
-                )
-                self._bind_feature(canvas, point_id, feature_tag)
-            if all_not_visible:
-                continue
-            label_text = (
-                feat["properties"].get(self.label_key)
-                if self.label_key
-                else None
-            )
-            if label_text:
-                # if feat['geometry'].get("type") == "MultiPoint":
-
-                # x1, y1, x2, y2 = canvas.bbox(feature_tag)
-                label = LabelAnnotation(
-                    text=label_text,
-                    offset=feat.get("label_offset", (r + 2, -r - 2)),
-                    font=feat.get("label_font", ("Arial", 10)),
-                    text_color=feat.get("label_color", "black"),
-                    bg_color=feat.get("label_bg", "lightgray"),
-                    border_color=feat.get("label_border_color", "gray"),
-                    border_width=feat.get("label_border_width", 1),
-                )
-                label.draw(
-                    canvas, x_right, y_top, tags=(self.name, feature_tag)
-                )
-
-
-class ShapeLayer(MapLayer):
-
-    def __init__(
-        self,
-        name: str,
-        on_click=None,
-        label_key=None,
-    ):
-        super().__init__(name, on_click=on_click)
-        self.name = name
-        self.label_key = label_key
+        super().__init__(name, on_click=on_click, label_key=label_key)
 
     def draw(
         self,
         canvas: CanvasMap,
         project_fn: Callable[[float, float], tuple[float, float]],
-    ):
-
+    ) -> None:
         min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
 
         for feat in self.features:
-            feature_tag = f"{self.name}_{self.feature_count}"
-            geom = feat["geometry"]
-            raw = geom["coordinates"]
+            # Each feat.geoms is a list of PointSequence
+            for seq in feat.geoms:
+                x_right = None
+                y_top = None
+                feature_tag = f"{self.name}_{feat.sequence_index}"
 
-            # normalize both Polygon and MultiPolygon into a list of rings
-            if geom["type"] == "MultiPolygon":
-                rings = [ring for polygon in raw for ring in polygon]
-            else:  # "Polygon"
-                rings = raw
+                for lon, lat in seq:
+                    if not (
+                        min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
+                    ):
+                        continue
+                    x, y = project_fn(lat, lon)
+                    if x_right is None or x > x_right:
+                        x_right, y_top = x, y
+                    r = feat.properties.get("radius", 4)
+                    color = feat.properties.get("color", "red")
+                    outline = feat.properties.get("outline", "")
+                    canvas.create_oval(
+                        x - r,
+                        y - r,
+                        x + r,
+                        y + r,
+                        fill=color,
+                        outline=outline,
+                        tags=(self.name, feature_tag),
+                    )
+                    self._bind_feature(canvas, feature_tag, feat)
 
-            # pull all the rings into a single list
+                # draw label at rightmost point
+                label_text = self._get_label_text(feat)
+                if x_right is not None:
+                    if label_text:
+                        from canvamap.map_layer import LabelAnnotation
+
+                        label = LabelAnnotation(
+                            text=label_text,
+                            offset=feat.properties.get(
+                                "label_offset", (r + 2, -r - 2)
+                            ),
+                            font=feat.properties.get(
+                                "label_font", ("Arial", 10)
+                            ),
+                            text_color=feat.properties.get(
+                                "label_color", "black"
+                            ),
+                            bg_color=feat.properties.get(
+                                "label_bg", "lightgray"
+                            ),
+                            border_color=feat.properties.get(
+                                "label_border_color", "gray"
+                            ),
+                            border_width=feat.properties.get(
+                                "label_border_width", 1
+                            ),
+                        )
+                        label.draw(
+                            canvas,
+                            x_right,
+                            y_top,
+                            tags=(self.name, feature_tag),
+                        )
+
+
+class ShapeLayer(MapLayer):
+    """
+    Render polygon and multipolygon features,
+    respecting holes via image overlays.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        on_click: Callable[[Feature], None] | None = None,
+        label_key: str | None = None,
+    ):
+        super().__init__(name, on_click=on_click, label_key=label_key)
+
+    def draw(
+        self,
+        canvas: CanvasMap,
+        project_fn: Callable[[float, float], tuple[float, float]],
+    ) -> None:
+        min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
+
+        for feat in self.features:
+            # Build a flat list of LinearRings for both Polygon & MultiPolygon:
+            #
+            # - Polygon:    feat.geoms == List[Ring]
+            # - MultiPolygon: feat.geoms == List[Polygon],
+            # where Polygon == List[Ring]
+            first = feat.geoms[0]
+            if first and isinstance(first[0], tuple):
+                # Single Polygon: each element of geoms is already a LinearRing
+                rings = feat.geoms
+            else:
+                # MultiPolygon: geoms is list of polygons;
+                # flatten out all rings
+                rings = [ring for polygon in feat.geoms for ring in polygon]
+
+            # Eachring is always List[ (lon,lat), … ]
             lats = [lat for ring in rings for lon, lat in ring]
             lons = [lon for ring in rings for lon, lat in ring]
-
-            visible = (
-                min_lon <= min(lons) <= max_lon
-                and min_lat <= min(lats) <= max_lat
-            )
-            if not visible:
+            if (
+                max(lats) < min_lat
+                or min(lats) > max_lat
+                or max(lons) < min_lon
+                or min(lons) > max_lon
+            ):
                 continue
 
-            # if max(lats) < min_lat or min(lats) > max_lat:
-            #     continue
-            # if max(lons) < min_lon or min(lons) > max_lon:
-            #     continue
+            feature_tag = f"{self.name}_{feat.sequence_index}"
+            # Draw holes via image overlay
+            from canvamap.map_layer import draw_feature_with_holes
 
-            for ring in rings:
-                x_right = None
-                y_right = None
-                points = [project_fn(lat, lon) for lon, lat in ring]
-                for x, y in points:  # find the rightmost point for the label
-                    if x_right is None or x > x_right:
-                        x_right, y_right = x, y
-
-                outline = feat.get(
-                    "outline", "black"
-                )  # just the outline because it does not work with the image
-                _ = canvas.create_polygon(
-                    *points,
-                    fill="",
-                    outline=outline,
-                    tags=(self.name, feature_tag),
-                )
-                shape_image = draw_feature_with_holes(
-                    canvas, project_fn, feat, self.name
-                )
-                self._bind_feature(canvas, shape_image, feat)
-
-            label_text = (
-                feat["properties"].get(self.label_key)
-                if self.label_key
-                else None
+            image_ids = draw_feature_with_holes(
+                canvas, project_fn, feat, feature_tag
             )
+            if isinstance(image_ids, list):
+                for image_id in image_ids:
+                    self._bind_feature(canvas, image_id, feat)
+            else:
+                self._bind_feature(canvas, image_ids, feat)
+
+            # Label at first ring's first vertex
+            label_text = self._get_label_text(feat)
             if label_text:
+                lon, lat = rings[0][0]
+                x, y = project_fn(lat, lon)
+                from canvamap.map_layer import LabelAnnotation
+
                 label = LabelAnnotation(
                     text=label_text,
-                    offset=feat["properties"].get("label_offset", (0, 0)),
-                    font=feat["properties"].get("label_font", ("Arial", 10)),
-                    text_color=feat["properties"].get("label_color", "black"),
-                    bg_color=feat["properties"].get("label_bg", "lightgray"),
-                    border_color=feat["properties"].get(
+                    offset=feat.properties.get("label_offset", (0, 0)),
+                    font=feat.properties.get("label_font", ("Arial", 10)),
+                    text_color=feat.properties.get("label_color", "black"),
+                    bg_color=feat.properties.get("label_bg", "lightgray"),
+                    border_color=feat.properties.get(
                         "label_border_color", "gray"
                     ),
-                    border_width=feat["properties"].get(
-                        "label_border_width", 1
-                    ),
+                    border_width=feat.properties.get("label_border_width", 1),
                 )
-                # x1, y1, x2, y2 = canvas.bbox(shape_image)
-                label.draw(
-                    canvas, x_right, y_right, tags=(self.name, feature_tag)
-                )
+                label.draw(canvas, x, y, tags=(self.name, feature_tag))
 
 
 class LineLayer(MapLayer):
     """
-    Layer for rendering LineString / MultiLineString features.
-
-    TODO: implement `draw()` to convert features into canvas lines.
+    Render LineString and MultiLineString features
+    as polylines with optional labels.
     """
 
-    def __init__(self, name, on_click=None, label_key=None):
-        super().__init__(name, on_click, label_key)
+    def __init__(
+        self,
+        name: str,
+        on_click: Callable[[Feature], None] | None = None,
+        label_key: str | None = None,
+    ):
+        super().__init__(name, on_click=on_click, label_key=label_key)
 
     def draw(
         self,
         canvas: CanvasMap,
         project_fn: Callable[[float, float], tuple[float, float]],
-    ):
-        """
-        Draw the line features on the canvas.
-        Raise NotImplementedError until this is implemented.
-        """
+    ) -> None:
+        # Get view bounds
         min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
         for feat in self.features:
-            x_right = None
-            y_right = None
-            feature_tag = f"{self.name}_{self.feature_count}"
-            geom = feat["geometry"]
-            raw = geom["coordinates"]
+            for seq in feat.geoms:
+                # Build sequence of projected points
+                pts = []
+                for lon, lat in seq:
+                    if not (
+                        min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
+                    ):
+                        continue
+                    x, y = project_fn(lat, lon)
+                    pts.extend([x, y])
+                if len(pts) < 4:
+                    continue  # need at least two points to draw a line
 
-            # normalize both Polygon and MultiPolygon into a list of rings
-            if geom["type"] == "MultiLineString":
-                lines = raw
-            else:  # "LineString"
-                lines = [raw]
-            lats = [lat for line in lines for lon, lat in line]
-            lons = [lon for line in lines for lon, lat in line]
-            print("Canvas  lon range:", max_lon, "→", min_lon)
-            print("Canvas  lat range:", min_lat, "→", max_lat)
-            print("Feature lon range:", min(lons), "→", max(lons))
-            print("Feature lat range:", min(lats), "→", max(lats))
+                feature_tag = f"{self.name}_{feat.sequence_index}"
 
-            visible = (
-                min_lon <= min(lons) <= max_lon
-                and min_lat <= min(lats) <= max_lat
-            )
-            if not visible:
-                continue
-
-            props = feat.get("properties", {})
-            style = {
-                "fill": props.get("fill", "black"),
-                "width": props.get("width", 1),
-                "dash": tuple(props["dash"]) if "dash" in props else None,
-                "arrow": props.get("arrow", "none"),
-                "capstyle": props.get("capstyle", "round"),
-                "joinstyle": props.get("joinstyle", "round"),
-                "smooth": props.get("smooth", False),
-                "splinesteps": props.get("splinesteps", 12),
-            }
-            canvas_opts = {k: v for k, v in style.items() if v is not None}
-
-            for line in lines:
-
-                points = [project_fn(lat, lon) for lon, lat in line]
-                for x, y in points:  # find the rightmost point for the label
-                    if x_right is None or x > x_right:
-                        x_right, y_right = x, y
-
-                line_id = canvas.create_line(
-                    *points, **canvas_opts, tags=(self.name, feature_tag)
+                # Draw polyline
+                canvas.create_line(
+                    *pts,
+                    fill=feat.properties.get("color", "black"),
+                    width=feat.properties.get("width", 2),
+                    dash=feat.properties.get("dash", None),
+                    tags=(self.name, feature_tag),
                 )
-                self._bind_feature(canvas, line_id, feat)
-            label_text = (
-                feat["properties"].get(self.label_key)
-                if self.label_key
-                else None
-            )
-            if label_text:
-                label = LabelAnnotation(
-                    text=label_text,
-                    offset=feat["properties"].get("label_offset", (0, 0)),
-                    font=feat["properties"].get("label_font", ("Arial", 10)),
-                    text_color=feat["properties"].get("label_color", "black"),
-                    bg_color=feat["properties"].get("label_bg", "lightgray"),
-                    border_color=feat["properties"].get(
-                        "label_border_color", "gray"
-                    ),
-                    border_width=feat["properties"].get(
-                        "label_border_width", 1
-                    ),
-                )
-                # x1, y1, x2, y2 = canvas.bbox(shape_image)
-                label.draw(
-                    canvas, x_right, y_right, tags=(self.name, feature_tag)
-                )
+                self._bind_feature(canvas, feature_tag, feat)
+
+                # Optional label at the last point
+                label_text = self._get_label_text(feat)
+                if label_text:
+                    x_label, y_label = pts[-2], pts[-1]
+                    from canvamap.map_layer import LabelAnnotation
+
+                    label = LabelAnnotation(
+                        text=label_text,
+                        offset=feat.properties.get("label_offset", (0, 0)),
+                        font=feat.properties.get("label_font", ("Arial", 10)),
+                        text_color=feat.properties.get("label_color", "black"),
+                        bg_color=feat.properties.get("label_bg", "lightgray"),
+                        border_color=feat.properties.get(
+                            "label_border_color", "gray"
+                        ),
+                        border_width=feat.properties.get(
+                            "label_border_width", 1
+                        ),
+                    )
+                    label.draw(
+                        canvas,
+                        x_label,
+                        y_label,
+                        tags=(self.name, feature_tag),
+                    )
 
 
 class LabelAnnotation:
@@ -358,7 +323,11 @@ class LabelAnnotation:
         self.border_width = border_width
 
     def draw(
-        self, canvas: CanvasMap, x: float, y: float, tags: Sequence[str] = ()
+        self,
+        canvas: CanvasMap,
+        x: float,
+        y: float,
+        tags: Sequence[str] = (),
     ) -> None:
         dx, dy = self.offset
         tx, ty = x + dx, y + dy
@@ -382,11 +351,13 @@ class LabelAnnotation:
         canvas.tag_lower(rect_id, text_id)
 
 
-def draw_feature_with_holes(canvas, project_fn, feat, tag, opacity=0.5):
-    geom = feat["geometry"]
-    coords = geom["coordinates"]
+def draw_feature_with_holes(
+    canvas, project_fn, feat: Feature, tag, opacity=0.5
+):
 
-    if geom["type"] == "MultiPolygon":
+    coords = feat.geoms
+
+    if feat.geometry_type == "MultiPolygon":
         polygons = coords
     else:  # "Polygon"
         polygons = [coords]
@@ -414,8 +385,8 @@ def draw_feature_with_holes(canvas, project_fn, feat, tag, opacity=0.5):
             draw.polygon([(x - min_x, y - min_y) for x, y in hole], fill=0)
 
         # Fill color + alpha
-        fill_color = feat["properties"].get("fill", "red")
-        alpha = int(feat["properties"].get("alpha", opacity) * 255)
+        fill_color = feat.properties.get("fill", "red")
+        alpha = int(feat.properties.get("alpha", opacity) * 255)
         color_img = Image.new(
             "RGBA", (w, h), (*ImageColor.getrgb(fill_color), alpha)
         )

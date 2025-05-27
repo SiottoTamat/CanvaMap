@@ -27,6 +27,8 @@ class CanvasMap(tk.Canvas):
         self.layers = []
         self._redraw_after_id = None
         self._image_refs: list[tk.PhotoImage] = []
+        self._feature_counter = 0
+        self.load_feature_sequence = []
 
         # Track pan state
         self._is_dragging = False
@@ -132,6 +134,7 @@ class CanvasMap(tk.Canvas):
         zoomable tile map rendering.
         """
         self.delete("all")
+        self._image_refs = []
         canvas_width = self.winfo_width()
         canvas_height = self.winfo_height()
 
@@ -251,7 +254,7 @@ class CanvasMap(tk.Canvas):
 
     def get_canvas_bounds(self) -> tuple[float, float, float, float]:
         # Return the geographic bounding box
-        # (min_lat, min_lon, max_lat, max_lon)
+        # (min_lon, min_lat, max_lon, max_lat)
         w, h = self.winfo_width(), self.winfo_height()
         top_left = self.project_canvas_to_latlon(0, 0)
         bottom_right = self.project_canvas_to_latlon(w, h)
