@@ -14,6 +14,7 @@ class CanvasMap(tk.Canvas):
         lat,
         lon,
         zoom,
+        email,
         provider="https://tile.openstreetmap.org",
         **kwargs,
     ):
@@ -21,6 +22,7 @@ class CanvasMap(tk.Canvas):
         self.lat = lat
         self.lon = lon
         self.zoom = zoom
+        self.email = email
         self.provider = provider
         self.tile_size = tile_size
         self.tile_images = []
@@ -156,7 +158,13 @@ class CanvasMap(tk.Canvas):
                 x = start_tile_x + i
                 y = start_tile_y + j
 
-                tile_data = request_tile(x, y, self.zoom, self.provider)
+                tile_data = request_tile(
+                    x,
+                    y,
+                    self.zoom,
+                    email=self.email,
+                    provider=self.provider,
+                )
                 if tile_data:
                     image = Image.open(tile_data)
                     tk_image = ImageTk.PhotoImage(image)

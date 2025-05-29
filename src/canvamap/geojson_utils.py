@@ -33,7 +33,7 @@ def walk_features(
         yield obj, parent_chain
         # Handle GeometryCollection if present
         geom = obj.get("geometry", {})
-        if geom.get("type") == "GeometryCollection":
+        if obj.get("type") == "GeometryCollection":
             name = obj.get("properties", {}).get("name") or obj.get("id")
             chain = parent_chain + [name] if name else parent_chain
             for sub in geom.get("geometries", []):

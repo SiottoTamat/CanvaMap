@@ -1,18 +1,7 @@
 import math
 import requests
 from io import BytesIO
-from dotenv import load_dotenv
-import os
 from Siotto_Utils.logger_utils import setup_logger
-
-load_dotenv(".env")
-user_email = os.getenv("user_email")
-if not user_email:
-    raise RuntimeError(
-        "Missing required environment variable user_email.\n"
-        + "Please add your email to your .env file, for example:\n"
-        + "  user_email=youremail@example.com"
-    )
 
 logger = setup_logger(__name__)
 
@@ -73,7 +62,11 @@ def tile2degree(x_tile, y_tile, zoom) -> tuple:
 
 
 def request_tile(
-    x_tile, y_tile, zoom, provider: str = r"https://tile.openstreetmap.org"
+    x_tile,
+    y_tile,
+    zoom,
+    email: str,
+    provider: str = r"https://tile.openstreetmap.org",
 ) -> BytesIO | None:
     """Request tile from map provider."""
     # 1) sanity‐check zoom
@@ -92,7 +85,7 @@ def request_tile(
     if key in tile_memory_cache:
         return BytesIO(tile_memory_cache[key])
 
-    headers = {"User-Agent": f"canvamap/1.0 ({user_email})"}
+    headers = {"User-Agent": f"canvamap/1.0 ({email})"}
     url = f"{provider}/{zoom}/{x_tile}/{y_tile}.png"
     response = requests.get(url, headers=headers)
 

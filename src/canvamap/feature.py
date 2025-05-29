@@ -55,9 +55,14 @@ class Feature:
 
     def __post_init__(self):
         geom = self.raw.get("geometry", {})
-        self.geometry_type = geom.get("type", "")
+        if geom:
+            self.geometry_type = geom.get("type", "")
+            coords = geom.get("coordinates")
+        else:
+            self.geometry_type = ""
+            coords = None, None
         self.properties = self.raw.get("properties", {}) or {}
-        coords = geom.get("coordinates")
+
         # case by case normalization
         if self.geometry_type == "Point":
             self.geoms = [[tuple(coords)]]

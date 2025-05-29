@@ -1,10 +1,15 @@
 import tkinter as tk
 import json
+import os
+from dotenv import load_dotenv
 
 from canvamap.canvas_map import CanvasMap
 
 # from canvamap.map_layer import PointLayer, ShapeLayer, MapLayer
 from canvamap.geojson_utils import load_geojson_to_map
+
+load_dotenv(".env")
+email = os.getenv("user_email")
 
 
 def on_click(feat):
@@ -16,7 +21,7 @@ def open_window(x, y, zoom=15, features: dict = {}, on_click=None):
     window.title("Test Window")
     window.geometry("1000x1000")
 
-    canvas = CanvasMap(window, x, y, zoom)
+    canvas = CanvasMap(window, x, y, zoom, email)
     canvas.pack(fill="both", expand=True)
 
     load_geojson_to_map(canvas, features, on_click, label_key="label")

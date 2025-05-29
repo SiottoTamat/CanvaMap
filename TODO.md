@@ -21,4 +21,4 @@
 
 ## Refactoring
 - [x] refactor adding .add_feature to the layers
-- [ ]
+- [x] refactor creating the Feature class to store the data of each geojson feature
