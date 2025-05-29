@@ -23,6 +23,12 @@ def open_window(x, y, zoom=15, features: dict = {}, on_click=None):
 
     canvas = CanvasMap(window, x, y, zoom, email)
     canvas.pack(fill="both", expand=True)
+    canvas.on(
+        "<Button-3>",
+        lambda e: print(
+            "right-clicked at", canvas.project_canvas_to_latlon(e.x, e.y)
+        ),
+    )
 
     load_geojson_to_map(canvas, features, on_click, label_key="label")
 

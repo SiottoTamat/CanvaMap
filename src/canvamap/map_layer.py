@@ -16,12 +16,24 @@ class MapLayer(ABC):
     def __init__(
         self,
         name: str,
-        on_click: Callable[[Feature], None] | None = None,
+        on_click_feature: Callable[[Feature], None] | None = None,
+        on_right_click_feature: Callable[[Feature], None] | None = None,
+        on_double_click_feature: Callable[[Feature], None] | None = None,
+        on_middle_click_feature: Callable[[Feature], None] | None = None,
+        on_mouse_enter_feature: Callable[[Feature], None] | None = None,
+        on_mouse_leave_feature: Callable[[Feature], None] | None = None,
         label_key: str | None = None,
     ):
         self.name = name
         self.visible = True
-        self.on_click = on_click
+        # feature callbacks
+        self.on_click_feature = on_click_feature
+        self.on_right_click_feature = on_right_click_feature
+        self.on_double_click_feature = on_double_click_feature
+        self.on_middle_click_feature = on_middle_click_feature
+        self.on_mouse_enter_feature = on_mouse_enter_feature
+        self.on_mouse_leave_feature = on_mouse_leave_feature
+
         self.label_key = label_key
         self.features: list[Feature] = []
 
@@ -41,11 +53,42 @@ class MapLayer(ABC):
         tag: str,
         feature: Feature,
     ) -> None:
-        if not self.on_click:
-            return
-        canvas.tag_bind(
-            tag, "<Button-1>", lambda e, f=feature: self.on_click(f)
-        )
+        if self.on_click_feature:
+            canvas.tag_bind(
+                tag,
+                "<Button-1>",
+                lambda e, f=feature: self.on_click_feature(f),
+            )
+        if self.on_right_click_feature:
+            canvas.tag_bind(
+                tag,
+                "<Button-3>",
+                lambda e, f=feature: self.on_right_click_feature(f),
+            )
+        if self.on_double_click_feature:
+            canvas.tag_bind(
+                tag,
+                "<Double-Button-1>",
+                lambda e, f=feature: self.on_double_click_feature(f),
+            )
+        if self.on_middle_click_feature:
+            canvas.tag_bind(
+                tag,
+                "<Button-2>",
+                lambda e, f=feature: self.on_middle_click_feature(f),
+            )
+        if self.on_mouse_enter_feature:
+            canvas.tag_bind(
+                tag,
+                "<Enter>",
+                lambda e, f=feature: self.on_mouse_enter_feature(f),
+            )
+        if self.on_mouse_leave_feature:
+            canvas.tag_bind(
+                tag,
+                "<Leave>",
+                lambda e, f=feature: self.on_mouse_leave_feature(f),
+            )
 
     def _get_label_text(self, feature: Feature) -> str:
         if self.label_key:
@@ -75,7 +118,7 @@ class PointLayer(MapLayer):
         on_click: Callable[[Feature], None] | None = None,
         label_key: str | None = None,
     ):
-        super().__init__(name, on_click=on_click, label_key=label_key)
+        super().__init__(name, on_click_feature=on_click, label_key=label_key)
 
     def draw(
         self,
@@ -160,7 +203,7 @@ class ShapeLayer(MapLayer):
         on_click: Callable[[Feature], None] | None = None,
         label_key: str | None = None,
     ):
-        super().__init__(name, on_click=on_click, label_key=label_key)
+        super().__init__(name, on_click_feature=on_click, label_key=label_key)
 
     def draw(
         self,
@@ -257,7 +300,7 @@ class LineLayer(MapLayer):
         on_click: Callable[[Feature], None] | None = None,
         label_key: str | None = None,
     ):
-        super().__init__(name, on_click=on_click, label_key=label_key)
+        super().__init__(name, on_click_feature=on_click, label_key=label_key)
 
     def draw(
         self,

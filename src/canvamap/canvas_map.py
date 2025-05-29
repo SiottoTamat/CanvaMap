@@ -1,6 +1,7 @@
 from PIL import Image, ImageTk
 import tkinter as tk
 import math
+from typing import Callable
 
 from canvamap.tile_handler import request_tile, degree2tile, tile2degree
 
@@ -32,6 +33,19 @@ class CanvasMap(tk.Canvas):
         self._feature_counter = 0
         self.load_feature_sequence = []
 
+        self._user_event_callbacks: dict[
+            str, list[Callable[[tk.Event], None]]
+        ] = {}
+        self.bind("<<user_event>>", self._on_user_event)
+        for seq in (
+            "<Button-3>",
+            "<Button-2>",
+            "<Enter>",
+            "<Leave>",
+            "<Double-Button-1>",
+        ):
+            self.bind(seq, lambda e, s=seq: self._on_user_event(s, e))
+
         # Track pan state
         self._is_dragging = False
         self._drag_start_x = 0
@@ -39,6 +53,27 @@ class CanvasMap(tk.Canvas):
         self.offset_x = 0
         self.offset_y = 0
 
+        # bind navigation
+        self._bind_navigation()
+
+        self.after(100, self.draw_map)
+
+    def on(self, sequence: str, callback: Callable[[tk.Event], None]) -> None:
+        """
+        Register a user callback for a given sequence.
+        """
+        self._user_event_callbacks.setdefault(sequence, []).append(callback)
+
+    def _on_user_event(self, sequence: str, event: tk.Event) -> None:
+        """
+        Internal dispatcher called for each bound sequence.
+        sequence is the raw Tk event string
+        (e.g. "<Button-3>")
+        """
+        for cb in self._user_event_callbacks.get(sequence, []):
+            cb(event)
+
+    def _bind_navigation(self):
         self.bind("<Configure>", self._on_resize)
         self.bind("<ButtonPress-1>", self._start_drag)
         self.bind("<B1-Motion>", self._on_drag)
@@ -46,8 +81,6 @@ class CanvasMap(tk.Canvas):
         self.bind("<MouseWheel>", self._on_zoom)  # Windows
         self.bind("<Button-4>", self._on_zoom)  # Linux scroll up
         self.bind("<Button-5>", self._on_zoom)  # Linux scroll down
-
-        self.after(100, self.draw_map)
 
     def _on_resize(self, event):
         if self._redraw_after_id:
