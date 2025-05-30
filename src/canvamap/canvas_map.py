@@ -30,6 +30,7 @@ class CanvasMap(tk.Canvas):
         self.lat = lat
         self.lon = lon
         self.zoom = zoom
+        self.zoom_range = (0, 19)
         self.email = email
         self.provider_template = provider_template
 
@@ -155,12 +156,14 @@ class CanvasMap(tk.Canvas):
             self.draw_map()
 
     def _on_zoom(self, event):
-        if event.num == 5 or event.delta < 0:
-            if self.zoom > 0:
-                self.zoom -= 1
-        elif event.num == 4 or event.delta > 0:
-            if self.zoom < 19:
-                self.zoom += 1
+        old_zoom = self.zoom
+        if event.delta > 0:
+            self.zoom = min(self.zoom + 1, self.zoom_range[1])
+        else:
+            self.zoom = max(self.zoom - 1, self.zoom_range[0])
+
+        if self.zoom == old_zoom:
+            return
         self.draw_map()
 
     def _get_origin_px(self):
@@ -284,6 +287,9 @@ class CanvasMap(tk.Canvas):
         self._draw_layers()
 
     def _draw_layers(self):
+        if not self.layers:
+            return
+
         project = self.project_latlon_to_canvas
         for layer in self.layers:
             if layer.visible:
