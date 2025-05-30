@@ -296,6 +296,40 @@ class CanvasMap(tk.Canvas):
 
         self._draw_layers()
 
+    def set_visible(
+        self,
+        *,
+        dataset: str | None = None,
+        feature_type: str | None = None,
+        visible: bool = True,
+    ):
+        for layer in self.layers:
+            for feat in layer.features:
+                match = True
+                if dataset is not None:
+                    if feat.properties.get("dataset") != dataset:
+                        match = False
+                if feature_type is not None:
+                    if feat.geometry_type != feature_type:
+                        match = False
+                if match:
+                    for tag in (
+                        f"layer:{layer.name}",
+                        layer._feature_tag(feat),
+                    ):
+                        self.itemconfigure(
+                            tag, state="normal" if visible else "hidden"
+                        )
+
+    def clear_features_by_dataset(self, dataset: str):
+        for layer in self.layers:
+            layer.features = [
+                f
+                for f in layer.features
+                if f.properties.get("dataset") != dataset
+            ]
+        self.draw_map()
+
     def _draw_layers(self):
         if not self.layers:
             return
