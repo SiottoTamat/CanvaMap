@@ -2,11 +2,14 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Union
 import uuid
 import copy
+import logging
 
 Point = Tuple[float, float]
 LinearRing = List[Point]
 PolygonRings = List[LinearRing]
 GeometryCoords = Union[List[Point], PolygonRings]  # any point list type
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,7 +48,7 @@ class Feature:
 
     raw: dict
     sequence_index: int = field(init=True)
-    collection_name: str
+    collection_name: Optional[str] = None
     parent_chain: List[str] = field(default_factory=list)
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -55,34 +58,41 @@ class Feature:
 
     def __post_init__(self):
         geom = self.raw.get("geometry", {})
-        if geom:
-            self.geometry_type = geom.get("type", "")
-            coords = geom.get("coordinates")
-        else:
-            self.geometry_type = ""
-            coords = None, None
-        self.properties = self.raw.get("properties", {}) or {}
+        self.geometry_type = geom.get("type", "") if geom else ""
+        coords = geom.get("coordinates", None) if geom else None
 
-        # case by case normalization
-        if self.geometry_type == "Point":
-            self.geoms = [[tuple(coords)]]
-        elif self.geometry_type == "MultiPoint":
-            self.geoms = [[tuple(point) for point in coords]]
-        elif self.geometry_type == "LineString":
-            self.geoms = [[tuple(point) for point in coords]]
-        elif self.geometry_type == "MultiLineString":
-            self.geoms = [[tuple(point) for point in line] for line in coords]
-        elif self.geometry_type == "Polygon":
-            self.geoms = [[tuple(point) for point in ring] for ring in coords]
-        elif self.geometry_type == "MultiPolygon":
-            self.geoms = [
-                [[tuple(point) for point in ring] for ring in polygon]
-                for polygon in coords
-            ]
-        # else:
-        #     raise ValueError(
-        #         f"Unsupported geometry type: {self.geometry_type}"
-        #     )
+        self.properties = self.raw.get("properties", {}) or {}
+        self.geoms = []
+
+        try:
+            if self.geometry_type == "Point":
+                self.geoms = [[tuple(coords)]]
+            elif self.geometry_type == "MultiPoint":
+                self.geoms = [[tuple(point) for point in coords]]
+            elif self.geometry_type == "LineString":
+                self.geoms = [[tuple(point) for point in coords]]
+            elif self.geometry_type == "MultiLineString":
+                self.geoms = [
+                    [tuple(point) for point in line] for line in coords
+                ]
+            elif self.geometry_type == "Polygon":
+                self.geoms = [
+                    [tuple(point) for point in ring] for ring in coords
+                ]
+            elif self.geometry_type == "MultiPolygon":
+                self.geoms = [
+                    [[tuple(point) for point in ring] for ring in polygon]
+                    for polygon in coords
+                ]
+            elif self.geometry_type:
+                logger.warning(
+                    f"Unsupported geometry type: {self.geometry_type}"
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to normalize geometry ({self.geometry_type}): {e}"
+            )
+            self.geoms = []
 
     @classmethod
     def from_raw(

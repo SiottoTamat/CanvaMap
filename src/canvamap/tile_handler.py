@@ -1,9 +1,9 @@
 import math
 import requests
 from io import BytesIO
-from Siotto_Utils.logger_utils import setup_logger
+import logging
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 tile_memory_cache: dict[tuple[int, int, int], bytes] = {}
 
@@ -66,7 +66,7 @@ def request_tile(
     y_tile,
     zoom,
     email: str,
-    provider: str = r"https://tile.openstreetmap.org",
+    provider_template: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
 ) -> BytesIO | None:
     """Request tile from map provider."""
     # 1) sanity‐check zoom
@@ -80,13 +80,25 @@ def request_tile(
     if x_tile < 0 or x_tile > max_index or y_tile < 0 or y_tile > max_index:
         # off‐map tile: skip fetching
         return None
+    # 3) sanity check on placeholders validation
+    if not all(kw in provider_template for kw in ("{x}", "{y}", "{z}")):
+        logger.error("Tile provider template must include {x}, {y}, and {z}")
+        return None
 
     key = (zoom, x_tile, y_tile)
     if key in tile_memory_cache:
         return BytesIO(tile_memory_cache[key])
 
+    try:
+        url = provider_template.format(z=zoom, x=x_tile, y=y_tile)
+    except KeyError as e:
+        logger.error(
+            f"Invalid provider template: missing {{{e.args[0]}}}"
+            f" in template: {provider_template}"
+        )
+        return None
+
     headers = {"User-Agent": f"canvamap/1.0 ({email})"}
-    url = f"{provider}/{zoom}/{x_tile}/{y_tile}.png"
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
@@ -95,7 +107,7 @@ def request_tile(
         return BytesIO(raw)
     else:
         logger.error(
-            f"Failed to fetch tile: {response.status_code}",
+            f"Failed to fetch tile: {response.status_code}"
             f", {url}, {response.content}",
         )
         return None

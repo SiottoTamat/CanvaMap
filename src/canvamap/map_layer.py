@@ -1,13 +1,13 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Callable, Sequence
+from typing import Callable
 import tkinter as tk
 import logging
 
 from canvamap.feature import Feature
 from canvamap.canvas_map import CanvasMap
+from canvamap.drawing_utils import LabelAnnotation, draw_feature_with_holes
 
-from PIL import Image, ImageTk, ImageDraw, ImageColor
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +95,9 @@ class MapLayer(ABC):
             return feature.properties.get(self.label_key, "")
         return feature.properties.get("label", "")
 
+    def _feature_tag(self, feature: Feature) -> str:
+        return f"feature:{self.name}:{feature.sequence_index}"
+
     @abstractmethod
     def draw(
         self,
@@ -132,7 +135,7 @@ class PointLayer(MapLayer):
             for seq in feat.geoms:
                 x_right = None
                 y_top = None
-                feature_tag = f"{self.name}_{feat.sequence_index}"
+                feature_tag = self._feature_tag(feat)
 
                 for lon, lat in seq:
                     if not (
@@ -152,7 +155,7 @@ class PointLayer(MapLayer):
                         y + r,
                         fill=color,
                         outline=outline,
-                        tags=(self.name, feature_tag),
+                        tags=(self.name, feature_tag, "feature"),
                     )
                     self._bind_feature(canvas, feature_tag, feat)
 
@@ -160,7 +163,6 @@ class PointLayer(MapLayer):
                 label_text = self._get_label_text(feat)
                 if x_right is not None:
                     if label_text:
-                        from canvamap.map_layer import LabelAnnotation
 
                         label = LabelAnnotation(
                             text=label_text,
@@ -187,7 +189,7 @@ class PointLayer(MapLayer):
                             canvas,
                             x_right,
                             y_top,
-                            tags=(self.name, feature_tag),
+                            tags=(f"layer:{self.name}", feature_tag),
                         )
 
 
@@ -238,18 +240,13 @@ class ShapeLayer(MapLayer):
             ):
                 continue
 
-            feature_tag = f"{self.name}_{feat.sequence_index}"
-            # Draw holes via image overlay
-            from canvamap.map_layer import draw_feature_with_holes
+            feature_tag = self._feature_tag(feat)
 
-            image_ids = draw_feature_with_holes(
+            # Draw holes via image overlay
+            for image_id in draw_feature_with_holes(
                 canvas, project_fn, feat, feature_tag
-            )
-            if isinstance(image_ids, list):
-                for image_id in image_ids:
-                    self._bind_feature(canvas, image_id, feat)
-            else:
-                self._bind_feature(canvas, image_ids, feat)
+            ):
+                self._bind_feature(canvas, image_id, feat)
 
             # Draw outline
             outline = feat.properties.get("outline", "")
@@ -263,16 +260,15 @@ class ShapeLayer(MapLayer):
                         *ring,
                         fill=outline,
                         width=width,
-                        tags=(self.name, feature_tag),
+                        tags=(f"layer:{self.name}", feature_tag, "feature"),
                     )
-            flat_points = [point for ring in points for point in ring]
-            right_x_point = max(flat_points, key=lambda x: x[0])
 
             # Label at first ring's first vertex
             label_text = self._get_label_text(feat)
             if label_text:
+                flat_points = [point for ring in points for point in ring]
+                right_x_point = max(flat_points, key=lambda x: x[0])
                 x, y = right_x_point
-                from canvamap.map_layer import LabelAnnotation
 
                 label = LabelAnnotation(
                     text=label_text,
@@ -285,7 +281,9 @@ class ShapeLayer(MapLayer):
                     ),
                     border_width=feat.properties.get("label_border_width", 1),
                 )
-                label.draw(canvas, x, y, tags=(self.name, feature_tag))
+                label.draw(
+                    canvas, x, y, tags=(f"layer:{self.name}", feature_tag)
+                )
 
 
 class LineLayer(MapLayer):
@@ -323,7 +321,7 @@ class LineLayer(MapLayer):
                 if len(pts) < 4:
                     continue  # need at least two points to draw a line
 
-                feature_tag = f"{self.name}_{feat.sequence_index}"
+                feature_tag = self._feature_tag(feat)
 
                 props = feat.properties
                 style = {
@@ -342,7 +340,7 @@ class LineLayer(MapLayer):
                 canvas.create_line(
                     *pts,
                     **canvas_opts,
-                    tags=(self.name, feature_tag),
+                    tags=(f"layer:{self.name}", feature_tag, "feature"),
                 )
                 self._bind_feature(canvas, feature_tag, feat)
 
@@ -350,7 +348,6 @@ class LineLayer(MapLayer):
                 label_text = self._get_label_text(feat)
                 if label_text:
                     x_label, y_label = pts[-2], pts[-1]
-                    from canvamap.map_layer import LabelAnnotation
 
                     label = LabelAnnotation(
                         text=label_text,
@@ -369,109 +366,5 @@ class LineLayer(MapLayer):
                         canvas,
                         x_label,
                         y_label,
-                        tags=(self.name, feature_tag),
+                        tags=(f"layer:{self.name}", feature_tag),
                     )
-
-
-class LabelAnnotation:
-    def __init__(
-        self,
-        text: str,
-        offset: tuple[int, int] = (0, 0),
-        text_color: str = "black",
-        font: tuple[str, int] = ("Arial", 10),
-        bg_color: str = "lightgray",
-        border_color: str = "gray",
-        border_width: int = 1,
-    ):
-        self.text = text
-        self.offset = offset
-        self.text_color = text_color
-        self.font = font
-        self.bg_color = bg_color
-        self.border_color = border_color
-        self.border_width = border_width
-
-    def draw(
-        self,
-        canvas: CanvasMap,
-        x: float,
-        y: float,
-        tags: Sequence[str] = (),
-    ) -> None:
-        dx, dy = self.offset
-        tx, ty = x + dx, y + dy
-        text_id = canvas.create_text(
-            tx,
-            ty,
-            text=self.text,
-            anchor="nw",
-            fill=self.text_color,
-            font=self.font,
-            tags=tags,
-        )
-        bbox = canvas.bbox(text_id)
-        rect_id = canvas.create_rectangle(
-            bbox,
-            fill=self.bg_color,
-            outline=self.border_color,
-            width=self.border_width,
-            tags=tags,
-        )
-        canvas.tag_lower(rect_id, text_id)
-
-
-def draw_feature_with_holes(
-    canvas, project_fn, feat: Feature, tag, opacity=0.5
-):
-
-    coords = feat.geoms
-
-    if feat.geometry_type == "MultiPolygon":
-        polygons = coords
-    else:  # "Polygon"
-        polygons = [coords]
-
-    image_ids = []
-    for polygon_rings in polygons:
-        # Project each ring
-        all_xy = []
-        for ring in polygon_rings:
-            pts = [project_fn(lat, lon) for lon, lat in ring]
-            all_xy.append(pts)
-
-        # Compute overlay size
-        xs = [x for ring in all_xy for x, y in ring]
-        ys = [y for ring in all_xy for x, y in ring]
-        min_x, max_x = int(min(xs)), int(max(xs))
-        min_y, max_y = int(min(ys)), int(max(ys))
-        w, h = max_x - min_x, max_y - min_y
-
-        # Build mask: first ring = fill, subsequent = holes
-        mask = Image.new("L", (w, h), 0)
-        draw = ImageDraw.Draw(mask)
-        draw.polygon([(x - min_x, y - min_y) for x, y in all_xy[0]], fill=255)
-        for hole in all_xy[1:]:
-            draw.polygon([(x - min_x, y - min_y) for x, y in hole], fill=0)
-
-        # Fill color + alpha
-        fill_color = feat.properties.get("fill", "red")
-        alpha = int(feat.properties.get("alpha", opacity) * 255)
-        color_img = Image.new(
-            "RGBA", (w, h), (*ImageColor.getrgb(fill_color), alpha)
-        )
-
-        # Composite
-        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        overlay.paste(color_img, (0, 0), mask)
-
-        # Turn into a Tk image and draw on canvas
-        tk_img = ImageTk.PhotoImage(overlay)
-        img_id = canvas.create_image(
-            min_x, min_y, image=tk_img, anchor="nw", tags=(tag,)
-        )
-        canvas._image_refs.append(tk_img)
-        image_ids.append(img_id)
-
-    # Return either a single id or list of ids
-    return image_ids[0] if len(image_ids) == 1 else image_ids

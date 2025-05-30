@@ -6,6 +6,13 @@ from typing import Callable
 from canvamap.tile_handler import request_tile, degree2tile, tile2degree
 
 tile_size = 256
+carto = "https://basemaps.cartocdn.com/"
+PROVIDERS_TEMPLATES = {
+    "openstreetmap": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "carto_light": carto + "light_all/{z}/{x}/{y}.png",
+    "carto_dark": carto + "dark_all/{z}/{x}/{y}.png",
+    "carto_voyager": carto + "rastertiles/voyager/{z}/{x}/{y}.png",
+}
 
 
 class CanvasMap(tk.Canvas):
@@ -16,7 +23,7 @@ class CanvasMap(tk.Canvas):
         lon,
         zoom,
         email,
-        provider="https://tile.openstreetmap.org",
+        provider_template="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         **kwargs,
     ):
         super().__init__(master, **kwargs)
@@ -24,19 +31,21 @@ class CanvasMap(tk.Canvas):
         self.lon = lon
         self.zoom = zoom
         self.email = email
-        self.provider = provider
+        self.provider_template = provider_template
+
         self.tile_size = tile_size
-        self.tile_images = []
+        self.tile_images: list[tk.PhotoImage] = []
+        self._last_tile_range = None
+
         self.layers = []
         self._redraw_after_id = None
-        self._image_refs: list[tk.PhotoImage] = []
         self._feature_counter = 0
         self.load_feature_sequence = []
 
         self._user_event_callbacks: dict[
             str, list[Callable[[tk.Event], None]]
         ] = {}
-        self.bind("<<user_event>>", self._on_user_event)
+
         for seq in (
             "<Button-3>",
             "<Button-2>",
@@ -44,7 +53,9 @@ class CanvasMap(tk.Canvas):
             "<Leave>",
             "<Double-Button-1>",
         ):
-            self.bind(seq, lambda e, s=seq: self._on_user_event(s, e))
+            super().bind(
+                seq, lambda e, s=seq: self._dispatch_user_event(s, e), add="+"
+            )
 
         # Track pan state
         self._is_dragging = False
@@ -53,36 +64,73 @@ class CanvasMap(tk.Canvas):
         self.offset_x = 0
         self.offset_y = 0
 
+        # track resize
+        self._last_resize = (None, None)
+
         # bind navigation
         self._bind_navigation()
 
         self.after(100, self.draw_map)
 
+    _protected = {
+        "<ButtonPress-1>",
+        "<B1-Motion>",
+        "<ButtonRelease-1>",
+        "<MouseWheel>",
+        "<Button-4>",
+        "<Button-5>",
+        "<Button-2>",
+        "<Button-3>",
+        "<Enter>",
+        "<Leave>",
+        "<Double-Button-1>",
+    }
+
+    def bind(self, sequence, func, add=False):
+        if (
+            sequence in self._protected
+            and not sequence.startswith("<<")
+            and not add
+        ):
+            raise RuntimeError(
+                f"Raw event {sequence!r} is reserved. "
+                f"Please use the virtual event '<<CanvasMap-...>>' via .on()."
+            )
+        # allow virtual events (<<…>>) or anything else
+        return super().bind(sequence, func, add=add)
+
     def on(self, sequence: str, callback: Callable[[tk.Event], None]) -> None:
         """
-        Register a user callback for a given sequence.
+        Register a callback for a virtual event.
+        sequence should look like "<<CanvasMap-RightClick>>", etc.
+        The callback will receive the original tk.Event.
         """
         self._user_event_callbacks.setdefault(sequence, []).append(callback)
 
-    def _on_user_event(self, sequence: str, event: tk.Event) -> None:
+    def _dispatch_user_event(self, sequence: str, event: tk.Event) -> None:
         """
-        Internal dispatcher called for each bound sequence.
-        sequence is the raw Tk event string
-        (e.g. "<Button-3>")
+        Internal dispatcher: when a raw event fires, this gets called with
+        the original sequence string and the tk.Event.
         """
-        for cb in self._user_event_callbacks.get(sequence, []):
+        virtual = f"<<CanvasMap-{sequence.strip('<>')}>>"
+        for cb in self._user_event_callbacks.get(virtual, []):
             cb(event)
 
     def _bind_navigation(self):
-        self.bind("<Configure>", self._on_resize)
-        self.bind("<ButtonPress-1>", self._start_drag)
-        self.bind("<B1-Motion>", self._on_drag)
-        self.bind("<ButtonRelease-1>", self._end_drag)
-        self.bind("<MouseWheel>", self._on_zoom)  # Windows
-        self.bind("<Button-4>", self._on_zoom)  # Linux scroll up
-        self.bind("<Button-5>", self._on_zoom)  # Linux scroll down
+        super().bind("<Configure>", self._on_resize, add="+")
+        super().bind("<ButtonPress-1>", self._start_drag, add="+")
+        super().bind("<B1-Motion>", self._on_drag, add="+")
+        super().bind("<ButtonRelease-1>", self._end_drag, add="+")
+        super().bind("<MouseWheel>", self._on_zoom, add="+")  # Windows
+        super().bind("<Button-4>", self._on_zoom, add="+")  # Linux scroll up
+        super().bind("<Button-5>", self._on_zoom, add="+")  # Linux scroll down
 
     def _on_resize(self, event):
+        if (event.width, event.height) == getattr(
+            self, "_last_resize", (None, None)
+        ):
+            return
+        self._last_resize = (event.width, event.height)
         if self._redraw_after_id:
             self.after_cancel(self._redraw_after_id)
         self._redraw_after_id = self.after(200, self.draw_map)
@@ -108,7 +156,7 @@ class CanvasMap(tk.Canvas):
 
     def _on_zoom(self, event):
         if event.num == 5 or event.delta < 0:
-            if self.zoom > 1:
+            if self.zoom > 0:
                 self.zoom -= 1
         elif event.num == 4 or event.delta > 0:
             if self.zoom < 19:
@@ -136,40 +184,20 @@ class CanvasMap(tk.Canvas):
                 origin_px_x: X coordinate of the tile origin on canvas,
                 origin_px_y: Y coordinate of the tile origin on canvas.
         """
-        canvas_width = self.winfo_width()
-        canvas_height = self.winfo_height()
-
-        num_x_tiles = (canvas_width // self.tile_size) + 2
-        num_y_tiles = (canvas_height // self.tile_size) + 2
-
         exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
 
-        start_tile_x = int(math.floor(exact_tile_x - num_x_tiles / 2))
-        start_tile_y = int(math.floor(exact_tile_y - num_y_tiles / 2))
-
-        offset_px_x = (exact_tile_x - start_tile_x) * self.tile_size
-        offset_px_y = (exact_tile_y - start_tile_y) * self.tile_size
-
-        origin_px_x = (canvas_width / 2) - offset_px_x
-        origin_px_y = (canvas_height / 2) - offset_px_y
-
-        return start_tile_x, start_tile_y, origin_px_x, origin_px_y
+        return self._compute_tile_origin(
+            exact_tile_x, exact_tile_y, self.winfo_width(), self.winfo_height()
+        )
 
     def draw_map(self, event=None):
         """
         Render the current visible map area on the canvas.
-
         This includes:
         - Determining visible tiles based on center coordinates and zoom level,
         - Requesting and drawing each tile image,
-        - Recalculating the center coordinates based on updated tile positions,
-        - Drawing all visible layers (e.g., points) on top of the map.
-
-        This is the core function driving the dynamic,
-        zoomable tile map rendering.
+        - Drawing all visible layers (e.g., points, polygons, etc.)
         """
-        self.delete("all")
-        self._image_refs = []
         canvas_width = self.winfo_width()
         canvas_height = self.winfo_height()
 
@@ -177,56 +205,82 @@ class CanvasMap(tk.Canvas):
             self.after(50, self.draw_map)
             return
 
-        num_x_tiles = (canvas_width // self.tile_size) + 2
-        num_y_tiles = (canvas_height // self.tile_size) + 2
+        (
+            start_tile_x,
+            start_tile_y,
+            origin_px_x,
+            origin_px_y,
+            num_x_tiles,
+            num_y_tiles,
+        ) = self._get_origin_px()
 
-        start_tile_x, start_tile_y, origin_px_x, origin_px_y = (
-            self._get_origin_px()
+        current_tile_range = (
+            start_tile_x,
+            start_tile_y,
+            num_x_tiles,
+            num_y_tiles,
+            self.zoom,
         )
 
-        self.tile_images.clear()
+        # Memoization check
+        if getattr(self, "_last_tile_range", None) == current_tile_range:
+            # No tile change → skip tile redraw
+            pass
+        else:
+            self._last_tile_range = current_tile_range
 
-        for j in range(num_y_tiles):
-            for i in range(num_x_tiles):
-                x = start_tile_x + i
-                y = start_tile_y + j
+            # Clear and re-render tiles
+            self.delete("tile")
+            self.delete("feature")
+            self.delete("latlonoverlay")
+            self.tile_images.clear()
 
-                tile_data = request_tile(
-                    x,
-                    y,
-                    self.zoom,
-                    email=self.email,
-                    provider=self.provider,
-                )
-                if tile_data:
-                    image = Image.open(tile_data)
-                    tk_image = ImageTk.PhotoImage(image)
+            for j in range(num_y_tiles):
+                for i in range(num_x_tiles):
+                    x = start_tile_x + i
+                    y = start_tile_y + j
 
-                    px = origin_px_x + i * self.tile_size
-                    py = origin_px_y + j * self.tile_size
-
-                    self.create_image(
-                        px,
-                        py,
-                        image=tk_image,
-                        anchor="nw",
-                        tags="tile",
+                    tile_data = request_tile(
+                        x,
+                        y,
+                        self.zoom,
+                        email=self.email,
+                        provider_template=self.provider_template,
                     )
-                    self.tile_images.append(tk_image)
+                    if tile_data:
+                        image = Image.open(tile_data)
+                        tk_image = ImageTk.PhotoImage(image)
 
+                        px = origin_px_x + i * self.tile_size
+                        py = origin_px_y + j * self.tile_size
+
+                        self.create_image(
+                            px,
+                            py,
+                            image=tk_image,
+                            anchor="nw",
+                            tags="tile",
+                        )
+                        self.tile_images.append(tk_image)
+
+        # Reset offset and update center
         self.offset_x = 0
         self.offset_y = 0
         self.lat, self.lon = self.get_center_latlon()
+
+        # Draw overlays (coordinate label and feature layers)
+        self.delete("latlonoverlay")
         self.create_text(
-            self.winfo_width() - 5,
-            self.winfo_height() - 5,
+            canvas_width - 5,
+            canvas_height - 5,
             text=f"Lat: {self.lat:.5f}, Lon: {self.lon:.5f},"
-            f" Zoom: {self.zoom}",
+            + f" Zoom: {self.zoom}",
             anchor="se",
             fill="black",
             font=("Arial", 10),
             tags="latlonoverlay",
         )
+
         self._draw_layers()
 
     def _draw_layers(self):
@@ -246,7 +300,6 @@ class CanvasMap(tk.Canvas):
         self.lat, self.lon = tile2degree(new_tile_x, new_tile_y, self.zoom)
         self.offset_x = 0
         self.offset_y = 0
-        print(f"After: {self.lat}, {self.lon}")
 
     def get_center_latlon(self) -> tuple[float, float]:
         """
@@ -267,18 +320,11 @@ class CanvasMap(tk.Canvas):
 
         exact_tile_x, exact_tile_y = degree2tile(self.lat, self.lon, self.zoom)
 
-        num_x_tiles = (canvas_width // self.tile_size) + 2
-        num_y_tiles = (canvas_height // self.tile_size) + 2
-
-        # Match EXACTLY the _get_origin_px calculation:
-        start_tile_x = int(math.floor(exact_tile_x - num_x_tiles / 2))
-        start_tile_y = int(math.floor(exact_tile_y - num_y_tiles / 2))
-
-        offset_px_x = (exact_tile_x - start_tile_x) * self.tile_size
-        offset_px_y = (exact_tile_y - start_tile_y) * self.tile_size
-
-        origin_px_x = (canvas_width / 2) - offset_px_x
-        origin_px_y = (canvas_height / 2) - offset_px_y
+        start_tile_x, start_tile_y, origin_px_x, origin_px_y, _, _ = (
+            self._compute_tile_origin(
+                exact_tile_x, exact_tile_y, canvas_width, canvas_height
+            )
+        )
 
         # Now recalculate exact center tile coordinates:
         center_tile_x = (
@@ -321,7 +367,7 @@ class CanvasMap(tk.Canvas):
         Returns:
             tuple[float, float]: (x, y) pixel coordinates on the canvas.
         """
-        start_tile_x, start_tile_y, origin_px_x, origin_px_y = (
+        start_tile_x, start_tile_y, origin_px_x, origin_px_y, _, _ = (
             self._get_origin_px()
         )
 
@@ -344,3 +390,38 @@ class CanvasMap(tk.Canvas):
             exact_tile_x + dx_tiles, exact_tile_y + dy_tiles, self.zoom
         )
         return lonlat
+
+    def _compute_tile_origin(
+        self,
+        exact_tile_x: float,
+        exact_tile_y: float,
+        canvas_width: int,
+        canvas_height: int,
+    ) -> tuple[int, int, float, float]:
+        """
+        Given the exact tile x/y and canvas dimensions, compute:
+        - start_tile_x/y: the top-left tile index to begin drawing from
+        - origin_px_x/y: the pixel offset of that tile on the canvas (top-left)
+
+        Includes any active offset due to dragging.
+        """
+        num_x_tiles = (canvas_width // self.tile_size) + 3
+        num_y_tiles = (canvas_height // self.tile_size) + 3
+
+        start_tile_x = int(math.floor(exact_tile_x - num_x_tiles / 2))
+        start_tile_y = int(math.floor(exact_tile_y - num_y_tiles / 2))
+
+        offset_px_x = (exact_tile_x - start_tile_x) * self.tile_size
+        offset_px_y = (exact_tile_y - start_tile_y) * self.tile_size
+
+        origin_px_x = (canvas_width / 2) - offset_px_x + self.offset_x
+        origin_px_y = (canvas_height / 2) - offset_px_y + self.offset_y
+
+        return (
+            start_tile_x,
+            start_tile_y,
+            origin_px_x,
+            origin_px_y,
+            num_x_tiles,
+            num_y_tiles,
+        )
