@@ -238,6 +238,7 @@ class CanvasMap(tk.Canvas):
             # Clear and re-render tiles
             self.delete("tile")
             self.delete("feature")
+            self.delete("label")
             self.delete("latlonoverlay")
             self.tile_images.clear()
 

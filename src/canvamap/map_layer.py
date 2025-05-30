@@ -259,7 +259,7 @@ class PointLayer(MapLayer):
                             canvas,
                             x_right,
                             y_top,
-                            tags=(f"layer:{self.name}", feature_tag),
+                            tags=(f"layer:{self.name}", feature_tag, "label"),
                         )
 
 
@@ -355,7 +355,10 @@ class ShapeLayer(MapLayer):
                     border_width=feat.properties.get("label_border_width", 1),
                 )
                 label.draw(
-                    canvas, x, y, tags=(f"layer:{self.name}", feature_tag)
+                    canvas,
+                    x,
+                    y,
+                    tags=(f"layer:{self.name}", feature_tag, "label"),
                 )
 
 
@@ -442,5 +445,5 @@ class LineLayer(MapLayer):
                         canvas,
                         x_label,
                         y_label,
-                        tags=(f"layer:{self.name}", feature_tag),
+                        tags=(f"layer:{self.name}", feature_tag, "label"),
                     )
