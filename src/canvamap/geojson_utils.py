@@ -62,28 +62,39 @@ def load_geojson_to_map(
     click_fn=None,
     label_key=None,
     clear_existing: bool = True,
-) -> List[Feature]:
+    dataset_name: str | None = None,
+) -> list[Feature]:
     """
-    Load GeoJSON into the CanvasMap by creating Feature objects, dispatching
-    them into layers, and preserving the load sequence.
+    Load GeoJSON into the CanvasMap by creating or updating layers.
+
+    Args:
+        map_widget: the CanvasMap widget
+        geojson: the parsed GeoJSON dictionary
+        click_fn: a callable for click interactivity
+        label_key: property key to use for labels
+        clear_existing: if True, features in reused layers are cleared
 
     Returns:
-        A list of Feature instances in the exact order they were ingested.
+        A list of Feature instances loaded, in sequence
     """
-    point_layer = PointLayer("points", on_click=click_fn, label_key=label_key)
-    line_layer = LineLayer("lines", on_click=click_fn, label_key=label_key)
-    shape_layer = ShapeLayer(
-        "polygons", on_click=click_fn, label_key=label_key
-    )
-    # Initialize widget sequence list if first load
+
+    def get_or_create_layer(name: str, layer_type):
+        for layer in map_widget.layers:
+            if layer.name == name and isinstance(layer, layer_type):
+                if clear_existing:
+                    layer.clear_features()
+                    map_widget.delete(f"layer:{name}")
+                return layer
+        new_layer = layer_type(name, on_click=click_fn, label_key=label_key)
+        map_widget.add_layer(new_layer)
+        return new_layer
+
+    point_layer = get_or_create_layer("points", PointLayer)
+    line_layer = get_or_create_layer("lines", LineLayer)
+    shape_layer = get_or_create_layer("polygons", ShapeLayer)
+
     if not hasattr(map_widget, "load_feature_sequence"):
         map_widget.load_feature_sequence = []
-
-    if clear_existing:
-        for layer in map_widget.layers:
-            if isinstance(layer, (PointLayer, LineLayer, ShapeLayer)):
-                layer.clear_features()
-                map_widget.delete(f"layer:{layer.name}")
 
     for raw_feat, chain in walk_features(geojson):
         idx = map_widget._feature_counter
@@ -95,6 +106,9 @@ def load_geojson_to_map(
             collection_name=collection,
             parent_chain=chain,
         )
+        if dataset_name:
+            feat_obj.properties["dataset"] = dataset_name
+
         map_widget.load_feature_sequence.append(feat_obj)
 
         t = feat_obj.geometry_type
@@ -104,10 +118,6 @@ def load_geojson_to_map(
             line_layer.add_feature(feat_obj)
         elif t in ("Polygon", "MultiPolygon"):
             shape_layer.add_feature(feat_obj)
-        # other types are skipped
-
-    map_widget.add_layer(point_layer)
-    map_widget.add_layer(line_layer)
-    map_widget.add_layer(shape_layer)
+        # unsupported geometries skipped
 
     return map_widget.load_feature_sequence
