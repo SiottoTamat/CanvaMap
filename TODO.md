@@ -8,9 +8,9 @@
 - [x] Polygon layer
 - [x] Line layer
 - [ ] Automatic zoom and focus to the visible layer/s
-- [ ] Hover tooltip
-- [ ] Right click
-- [ ] Middle click
+- [x] Hover tooltip
+- [x] Right click
+- [x] Middle click
 - [ ] Export visible map area as image
 - [ ] Export visible map data as geojson
 - [ ] Scroll wheel zoom smoothing
