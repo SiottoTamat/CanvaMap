@@ -2,8 +2,11 @@ from PIL import Image, ImageTk
 import tkinter as tk
 import math
 from typing import Callable
+from logging import getLogger
 
 from canvamap.tile_handler import request_tile, degree2tile, tile2degree
+
+logger = getLogger(__name__)
 
 tile_size = 256
 carto = "https://basemaps.cartocdn.com/"
@@ -271,6 +274,12 @@ class CanvasMap(tk.Canvas):
         self.offset_y = 0
         self.lat, self.lon = self.get_center_latlon()
 
+        # Guard: skip if bounds are still invalid
+        bounds = self.get_canvas_bounds()
+        if bounds is None:
+            self.after(50, self.draw_map)
+            return
+
         # Draw overlays (coordinate label and feature layers)
         self.delete("latlonoverlay")
         self.create_text(
@@ -355,6 +364,13 @@ class CanvasMap(tk.Canvas):
         # Return the geographic bounding box
         # (min_lon, min_lat, max_lon, max_lat)
         w, h = self.winfo_width(), self.winfo_height()
+
+        if w <= 1 or h <= 1:
+            logger.warning(
+                "Canvas is not visible yet. Returning empty bounding box."
+            )
+            return None
+
         top_left = self.project_canvas_to_latlon(0, 0)
         bottom_right = self.project_canvas_to_latlon(w, h)
         min_lat = min(top_left[0], bottom_right[0])
