@@ -44,8 +44,16 @@ def walk_features(
                 }
                 yield from walk_features(sub_feat, chain)
 
-    # Other types (GeometryCollection at top level
-    # or unsupported types) are ignored
+    elif typ == "GeometryCollection":
+        # Top-level GeometryCollection (not inside a Feature)
+        for i, geom in enumerate(obj.get("geometries", [])):
+            pseudo_feature = {
+                "type": "Feature",
+                "geometry": geom,
+                "properties": obj.get("properties", {}),
+                "id": f"{obj.get('id', 'gc')}_{i}",
+            }
+            yield pseudo_feature, parent_chain
 
 
 def load_geojson_to_map(
