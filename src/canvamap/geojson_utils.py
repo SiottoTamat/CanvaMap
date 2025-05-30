@@ -49,7 +49,11 @@ def walk_features(
 
 
 def load_geojson_to_map(
-    map_widget: CanvasMap, geojson: dict, click_fn=None, label_key=None
+    map_widget: CanvasMap,
+    geojson: dict,
+    click_fn=None,
+    label_key=None,
+    clear_existing: bool = True,
 ) -> List[Feature]:
     """
     Load GeoJSON into the CanvasMap by creating Feature objects, dispatching
@@ -66,6 +70,12 @@ def load_geojson_to_map(
     # Initialize widget sequence list if first load
     if not hasattr(map_widget, "load_feature_sequence"):
         map_widget.load_feature_sequence = []
+
+    if clear_existing:
+        for layer in map_widget.layers:
+            if isinstance(layer, (PointLayer, LineLayer, ShapeLayer)):
+                layer.clear_features()
+                map_widget.delete(f"layer:{layer.name}")
 
     for raw_feat, chain in walk_features(geojson):
         idx = map_widget._feature_counter

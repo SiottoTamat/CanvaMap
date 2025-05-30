@@ -98,6 +98,73 @@ class MapLayer(ABC):
     def _feature_tag(self, feature: Feature) -> str:
         return f"feature:{self.name}:{feature.sequence_index}"
 
+    def set_visible(self, visible: bool) -> None:
+        self.visible = visible
+
+    def clear_features(self) -> None:
+        """Remove all features from the layer."""
+        self.features.clear()
+
+    def remove_features(
+        self,
+        feature_id: str | None = None,
+        geometry_type: str | None = None,
+        property_filter: dict | None = None,
+    ) -> int:
+        """
+        Remove features from the layer matching the given filters.
+
+        Args:
+            feature_id: Remove the feature with this exact ID.
+            geometry_type: Remove all features of this geometry type.
+            property_filter: Dict of key-value pairs that must match
+                            exactly in the feature's properties.
+
+        Returns:
+            Number of features removed.
+        """
+        original_count = len(self.features)
+
+        def matches(f: Feature) -> bool:
+            if feature_id and f.id != feature_id:
+                return False
+            if geometry_type and f.geometry_type != geometry_type:
+                return False
+            if property_filter:
+                for key, val in property_filter.items():
+                    if f.properties.get(key) != val:
+                        return False
+            return True
+
+        self.features = [f for f in self.features if not matches(f)]
+        return original_count - len(self.features)
+
+    def remove_features_and_redraw(
+        self,
+        canvas: CanvasMap,
+        *,
+        feature_id: str | None = None,
+        geometry_type: str | None = None,
+        property_filter: dict | None = None,
+    ) -> int:
+        """
+        Remove matching features and delete their canvas representations.
+
+        Args:
+            canvas: The CanvasMap instance this layer is rendered on.
+            feature_id, geometry_type, property_filter: See remove_features().
+
+        Returns:
+            Number of features removed.
+        """
+        removed = self.remove_features(
+            feature_id=feature_id,
+            geometry_type=geometry_type,
+            property_filter=property_filter,
+        )
+        canvas.delete(f"layer:{self.name}")
+        return removed
+
     @abstractmethod
     def draw(
         self,
@@ -128,6 +195,9 @@ class PointLayer(MapLayer):
         canvas: CanvasMap,
         project_fn: Callable[[float, float], tuple[float, float]],
     ) -> None:
+        if not self.visible:
+            return
+
         min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
 
         for feat in self.features:
@@ -212,6 +282,9 @@ class ShapeLayer(MapLayer):
         canvas: CanvasMap,
         project_fn: Callable[[float, float], tuple[float, float]],
     ) -> None:
+        if not self.visible:
+            return
+
         min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
 
         for feat in self.features:
@@ -305,6 +378,9 @@ class LineLayer(MapLayer):
         canvas: CanvasMap,
         project_fn: Callable[[float, float], tuple[float, float]],
     ) -> None:
+        if not self.visible:
+            return
+
         # Get view bounds
         min_lon, min_lat, max_lon, max_lat = canvas.get_canvas_bounds()
         for feat in self.features:
