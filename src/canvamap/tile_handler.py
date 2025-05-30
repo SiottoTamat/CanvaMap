@@ -83,7 +83,10 @@ def request_tile(
         return None
     # 3) sanity check on placeholders validation
     if not all(kw in provider_template for kw in ("{x}", "{y}", "{z}")):
-        logger.error("Tile provider template must include {x}, {y}, and {z}")
+        logger.error(
+            f"Tile provider template is invalid. It must include "
+            f"{{x}}, {{y}}, and {{z}}. Got: {provider_template}"
+        )
         return None
 
     key = (zoom, x_tile, y_tile)
@@ -110,7 +113,8 @@ def request_tile(
                 return BytesIO(raw)
             else:
                 logger.warning(
-                    f"Attempt {attempt+1}: status {response.status_code} for {url}"
+                    f"Attempt {attempt+1}: "
+                    f"status {response.status_code} for {url}"
                 )
         except requests.RequestException as e:
             logger.warning(f"Attempt {attempt+1} failed: {e} ({url})")
