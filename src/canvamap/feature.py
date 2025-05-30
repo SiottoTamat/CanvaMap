@@ -55,6 +55,7 @@ class Feature:
     geometry_type: str = field(init=False)
     properties: dict = field(init=False)
     geoms: list[GeometryCoords] = field(init=False)
+    dataset_name: str | None = None
 
     def __post_init__(self):
         geom = self.raw.get("geometry", {})
@@ -101,6 +102,7 @@ class Feature:
         sequence_index: int,
         collection_name: Optional[str] = None,
         parent_chain: Optional[List[str]] = None,
+        dataset_name: Optional[str] = None,
     ):
         """
         Factory to create a Feature from a GeoJSON feature dict, preserving
@@ -113,5 +115,6 @@ class Feature:
             sequence_index=sequence_index,
             collection_name=collection_name,
             parent_chain=parent_chain or [],
+            dataset_name=dataset_name,
         )
         return feature
