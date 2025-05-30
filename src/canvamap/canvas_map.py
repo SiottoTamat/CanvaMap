@@ -289,6 +289,12 @@ class CanvasMap(tk.Canvas):
             if layer.visible:
                 layer.draw(self, project)
 
+    def clear_all_layers(self) -> None:
+        """Clear all features from all layers."""
+        for layer in self.layers:
+            layer.clear_features()
+            self.delete(f"layer:{layer.name}")
+
     def _update_center_after_pan(self):
         """Adjust self.lat/lon based on accumulated pixel drag offset."""
         dx_tiles = self.offset_x / self.tile_size

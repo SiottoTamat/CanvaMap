@@ -99,7 +99,7 @@ def request_tile(
         return None
 
     headers = {"User-Agent": f"canvamap/1.0 ({email})"}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=(3, 10))
 
     if response.status_code == 200:
         raw = response.content

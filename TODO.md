@@ -17,7 +17,8 @@
 - [ ] Move features with map when panning
 - [ ] Set visible and invisible layers
 - [x] There still an bug with the projection of coordinates (solved)
-- [ ] Add alternatives to tiling only on openstreetmap
+- [x] Add alternatives to tiling only on openstreetmap 
+- [ ] add Nasa GIBS and ESRI world imagery
 
 ## Refactoring
 - [x] refactor adding .add_feature to the layers
