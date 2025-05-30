@@ -2,6 +2,7 @@ import math
 import requests
 from io import BytesIO
 import logging
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -99,15 +100,40 @@ def request_tile(
         return None
 
     headers = {"User-Agent": f"canvamap/1.0 ({email})"}
-    response = requests.get(url, headers=headers, timeout=(3, 10))
 
-    if response.status_code == 200:
-        raw = response.content
-        tile_memory_cache[key] = raw
-        return BytesIO(raw)
-    else:
-        logger.error(
-            f"Failed to fetch tile: {response.status_code}"
-            f", {url}, {response.content}",
-        )
-        return None
+    for attempt in range(2):  # Try up to 2 times
+        try:
+            response = requests.get(url, headers=headers, timeout=(3, 10))
+            if response.status_code == 200:
+                raw = response.content
+                tile_memory_cache[key] = raw
+                return BytesIO(raw)
+            else:
+                logger.warning(
+                    f"Attempt {attempt+1}: status {response.status_code} for {url}"
+                )
+        except requests.RequestException as e:
+            logger.warning(f"Attempt {attempt+1} failed: {e} ({url})")
+
+    # Final fallback: gray tile
+    logger.error(f"Failed to fetch tile after retries: {url}")
+
+    tile_size = 256
+    fallback_tile = Image.new(
+        "RGB", (tile_size, tile_size), color=(240, 240, 240)
+    )
+    draw = ImageDraw.Draw(fallback_tile)
+    text = "Missing Tile"
+    font = ImageFont.load_default()
+    text_width, text_height = draw.textsize(text, font=font)
+    text_position = (
+        (tile_size - text_width) // 2,
+        (tile_size - text_height) // 2,
+    )
+    draw.text(text_position, text, fill="black", font=font)
+
+    buffer = BytesIO()
+    fallback_tile.save(buffer, format="PNG")
+    buffer.seek(0)
+    tile_memory_cache[key] = buffer.getvalue()
+    return buffer
