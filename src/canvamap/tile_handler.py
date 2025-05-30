@@ -3,10 +3,12 @@ import requests
 from io import BytesIO
 import logging
 from PIL import Image, ImageDraw, ImageFont
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
-tile_memory_cache: dict[tuple[int, int, int], bytes] = {}
+TILE_CACHE_SIZE = 1000
+tile_memory_cache: OrderedDict[tuple[int, int, int], bytes] = OrderedDict()
 
 
 def degree2tile(lat_deg, lon_deg, zoom):
@@ -110,6 +112,9 @@ def request_tile(
             if response.status_code == 200:
                 raw = response.content
                 tile_memory_cache[key] = raw
+                tile_memory_cache.move_to_end(key)
+                if len(tile_memory_cache) > TILE_CACHE_SIZE:
+                    tile_memory_cache.popitem(last=False)
                 return BytesIO(raw)
             else:
                 logger.warning(
